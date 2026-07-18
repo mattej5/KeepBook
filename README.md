@@ -12,7 +12,7 @@ See [PRD.md](PRD.md) for the full product spec, architecture, and evidence. **Wo
 
 - **Backend** — Python / FastAPI. Intake queue, classification + extraction via local Gemma 4 (`gemma4:e4b` through Ollama at `localhost:11434`), binning, checklist state.
 - **Frontend** — plain HTML/CSS/JS, no build step. Capture UI + bin-review/checklist dashboard.
-- **Eval** — `eval/` contains the kill-test scripts (`gen_w2.py`, `run_test.py`), the test-set generator (`gen_forms.py` — overlays fake data on official blank IRS PDFs in `eval/blank_forms/`), the phone-photo augmenter (`augment.py`), and the labeled test set itself (`eval/testset/`, 26 images + `labels.json`). All data synthetic.
+- **Eval** — `eval/` contains the kill-test scripts (`gen_w2.py`, `run_test.py`), the test-set generator (`gen_forms.py` — overlays fake data on official blank IRS PDFs in `eval/blank_forms/`), the phone-photo augmenter (`augment.py`), the full-set scorer (`run_eval.py`), and the labeled test set itself (`eval/testset/`, 32 images + `labels.json` — 29 scored in the main eval: 12 clean renders, 12 phone-photo degradations, 3 hand-filled, 2 junk; plus 3 classify-only samples). All data synthetic.
 
 ## Models
 
@@ -38,23 +38,34 @@ Same synthetic W-2, two model sizes:
 | `gemma4:e2b` | 5/6 | Silently returned the wrong number for federal tax withheld — confident, clean JSON, wrong value |
 | `gemma4:e4b` | 6/6 | None |
 
-Reproduced 3x. This is why we ship `e4b` and why mandatory human review is a core feature, not a nicety.
+Reproduced 3x (single-doc scripts `gen_w2.py` + `run_test.py`). This is why we ship `e4b` and why mandatory human review is a core feature, not a nicety.
+
+Scaled to the full 29-document eval (`eval/run_eval.py`; committed results in `eval/results_final_e4b.json`, `eval/results_final_e2b.json`, `eval/results_e4b_region.json`): doc-type accuracy 29/29 for both models; fields — e4b 66/106 (62.3%) fast, 98/106 (92.5%) in careful mode (`REGION_PASS=1`), e2b 40/106 (37.7%); silent wrong values — e4b 21 fast / 8 careful, e2b 36; median latency 17.7s / 28.2s / 13.0s.
 
 ## Run
 
 ```bash
-# backend
+# backend (Python 3.12)
 cd backend
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload  # (main.py in progress)
+uvicorn main:app --port 8100
+# app: http://localhost:8100  (backend serves the frontend too)
 
-# eval
+# tests — run from repo root, scoped exactly like this
+# (a bare `pytest` fails collection on eval/run_test.py, which is an inference script, not a test)
+backend/.venv/bin/python -m pytest backend/tests eval/test_scoring.py eval/test_gen_forms.py
+
+# eval (needs Ollama + models pulled)
 cd eval
 python gen_w2.py
-python run_test.py gemma4:e4b
+python run_test.py gemma4:e4b   # single-doc kill test
+python run_eval.py --model gemma4:e4b --labels labels.json --docs ./testset/   # full eval
 ```
 
-Requires [Ollama](https://ollama.com) with `gemma4:e4b` pulled.
+One timing-sensitive backend test can flake on a cold first run; a rerun is clean.
+
+Requires [Ollama](https://ollama.com) with `gemma4:e4b` pulled (tests don't — they use a fake adapter).
 
 ## Team
 
