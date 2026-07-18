@@ -66,7 +66,7 @@ Rule: a checklist item is satisfied only by a **confirmed** document. Unrecogniz
 
 | Method | Path | Body | Returns | Notes |
 |---|---|---|---|---|
-| POST | `/intake` | multipart file(s) | `{"queued": ["doc_001", ...]}` | Accepts one or many images. Also support `{"folder": "/path"}` JSON body for folder-drop. |
+| POST | `/intake` | multipart file(s) | `{"queued": ["doc_001", ...]}` | Multipart field name is `file`, repeated once per file (pinned — the built frontend sends exactly this; FastAPI: `file: list[UploadFile] = File(...)`). Also support `{"folder": "/path"}` JSON body for folder-drop. |
 | GET | `/queue` | — | `{"pending": n, "processing": "doc_002" \| null, "done": n}` | Frontend polls this during processing. |
 | GET | `/documents` | — | `[Document, ...]` | Everything, all statuses. |
 | GET | `/documents/{id}` | — | `Document` | |
