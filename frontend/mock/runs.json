@@ -1,0 +1,82 @@
+{
+  "runs": [
+    {
+      "doc_id": "doc_004",
+      "doc_type": "W-2",
+      "status": "extracted",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 4.31,
+      "preprocessed": true,
+      "retried": false,
+      "call_count": 2,
+      "stages": ["classify", "extract"],
+      "raw_available": true
+    },
+    {
+      "doc_id": "doc_003",
+      "doc_type": "1099-INT",
+      "status": "extracted",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 6.78,
+      "preprocessed": true,
+      "retried": true,
+      "call_count": 3,
+      "stages": ["classify", "classify", "extract"],
+      "raw_available": true
+    },
+    {
+      "doc_id": "doc_012",
+      "doc_type": "1098",
+      "status": "extracted",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 9.12,
+      "preprocessed": true,
+      "retried": false,
+      "call_count": 4,
+      "stages": ["classify", "extract", "region:lender", "region:borrower_name"],
+      "raw_available": true
+    },
+    {
+      "doc_id": "doc_018",
+      "doc_type": "1099-NEC",
+      "status": "extracted",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 11.44,
+      "preprocessed": true,
+      "retried": false,
+      "call_count": 3,
+      "stages": ["classify", "extract", "ensemble:gemma4:e2b"],
+      "raw_available": true
+    },
+    {
+      "doc_id": "doc_006",
+      "doc_type": "UNRECOGNIZED",
+      "status": "unrecognized",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 2.05,
+      "preprocessed": true,
+      "retried": false,
+      "call_count": 2,
+      "stages": ["classify", "classify"],
+      "raw_available": true
+    },
+    {
+      "doc_id": "doc_001",
+      "doc_type": "W-2",
+      "status": "extracted",
+      "model_runtime": "mock",
+      "model_name": "gemma4:e4b",
+      "latency_s": 3.9,
+      "preprocessed": true,
+      "retried": false,
+      "call_count": null,
+      "stages": [],
+      "raw_available": false
+    }
+  ]
+}

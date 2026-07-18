@@ -58,7 +58,7 @@
   }
 
   /* ---------- app state ---------- */
-  var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {} };
+  var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {}, expandedRuns: {}, runTraceCache: {} };
 
   var $ = function (id) { return document.getElementById(id); };
   function toast(msg) {
@@ -486,8 +486,8 @@
   }
 
   function renderTrace(id, bodyEl) {
-    if (!bodyEl) return;
-    api.getTrace(id).then(function (t) {
+    if (!bodyEl) return Promise.resolve();
+    return api.getTrace(id).then(function (t) {
       var head = '<div class="trace-head">' +
         esc((t.model_runtime || "") + " · " + (t.model_name || "")) +
         (t.latency_s != null ? " · " + t.latency_s + "s" : "") +
@@ -497,9 +497,14 @@
         var promptHead = prompt.slice(0, 240) + (prompt.length > 240 ? "…" : "");
         var isErr = c.error != null;
         var resp = isErr ? ("ERROR: " + c.error) : String(c.response == null ? "" : c.response);
-        return '<div class="trace-call"><div class="tc-seq">call ' + esc(String(c.seq || "?")) + '</div>' +
-          '<div class="tc-label">prompt</div><pre class="tc-pre">' + esc(promptHead) + '</pre>' +
-          '<div class="tc-label">response</div><pre class="tc-pre' + (isErr ? " tc-err" : "") + '">' + esc(resp) + '</pre></div>';
+        // Honest label: the pipeline STAGE that issued this call (classify /
+        // extract / region:<field> / ensemble:<model>). Falls back to "call N"
+        // for older traces captured before stage labels existed.
+        var label = c.stage ? c.stage : ("call " + String(c.seq || "?"));
+        var retryTag = c.retry ? '<span class="tc-retry">strict-JSON retry</span>' : "";
+        return '<div class="trace-call"><div class="tc-seq">' + esc(label) + retryTag + '</div>' +
+          '<div class="tc-label">prompt (input)</div><pre class="tc-pre">' + esc(promptHead) + '</pre>' +
+          '<div class="tc-label">raw model output</div><pre class="tc-pre' + (isErr ? " tc-err" : "") + '">' + esc(resp) + '</pre></div>';
       }).join("");
       bodyEl.innerHTML = head + (calls || '<div class="rl-empty">No model calls recorded.</div>');
     }).catch(function (e) {
@@ -739,9 +744,85 @@
       html += '<div class="nerd-foot">' +
         '<span class="hand-note" style="font-size:17px">the red-pen rate is the number to watch</span></div>';
 
+      // Recent runs — the cross-run trace surface. One row per processed doc;
+      // click to expand the exact per-call model I/O (reuses renderTrace).
+      html += '<div class="nerd-block" id="runs-block">' +
+        '<div class="nb-head"><span class="section-label" style="margin:0">Recent runs</span>' +
+        '<span class="nb-hint">click a row to see what the model saw &amp; said</span></div>' +
+        '<div id="runs-rows"><div class="rl-empty">Loading…</div></div></div>';
+
       $("nerds-body").innerHTML = html;
+      renderRuns();
     }).catch(function (e) {
       $("nerds-body").innerHTML = '<div class="rl-empty">Timeline unavailable (' + esc(e.message) + '). Needs backend /stats/timeline or mock mode.</div>';
+    });
+  }
+
+  // Recent-runs table: newest processed docs, each expandable to its full trace.
+  function renderRuns() {
+    var host = $("runs-rows");
+    if (!host || !api.getRuns) { if (host) host.innerHTML = ''; return; }
+    api.getRuns(20).then(function (r) {
+      var runs = (r && r.runs) || [];
+      if (!runs.length) { host.innerHTML = '<div class="rl-empty">No runs yet — process a document to see it here.</div>'; return; }
+      host.innerHTML = runs.map(function (run) {
+        var typeLabel = run.doc_type === "UNRECOGNIZED" ? "Unrecognized" : (run.doc_type || "—");
+        var stages = (run.stages || []).length
+          ? (run.stages || []).join(" · ")
+          : "no trace recorded";
+        var model = esc((run.model_runtime || "") + " · " + (run.model_name || ""));
+        var lat = run.latency_s != null ? esc(run.latency_s + "s") : "—";
+        var retryTag = run.retried ? '<span class="run-retry">retried</span>' : "";
+        return '<div class="run-row" data-id="' + esc(String(run.doc_id || "")) +
+          '" data-raw="' + (run.raw_available ? "1" : "0") + '">' +
+          '<button class="run-head" type="button" aria-expanded="false">' +
+          '<span class="run-caret">▸</span>' +
+          '<span class="run-type">' + esc(typeLabel) + ' <span class="run-id tnum">' + esc(String(run.doc_id || "")) + '</span></span>' +
+          '<span class="run-stages">' + esc(stages) + retryTag + '</span>' +
+          '<span class="run-model tnum">' + model + '</span>' +
+          '<span class="run-lat tnum">' + lat + '</span>' +
+          '</button>' +
+          '<div class="run-trace" hidden><div class="trace-body">Loading…</div></div>' +
+          '</div>';
+      }).join("");
+
+      host.querySelectorAll(".run-row").forEach(function (row) {
+        var head = row.querySelector(".run-head");
+        var panel = row.querySelector(".run-trace");
+        var body = row.querySelector(".trace-body");
+        var id = row.dataset.id;
+        function loadTrace() {
+          if (row.dataset.raw === "0") {
+            // No raws on disk for this run (seeded/older doc) — say so plainly
+            // rather than fetch a trace the backend would 404 on.
+            body.innerHTML = '<div class="rl-empty">No model trace was recorded for this document.</div>';
+          } else if (state.runTraceCache[id]) {
+            // Traces are immutable once a doc is processed; serve the cached
+            // render so the 5s telemetry refresh never re-flickers an open row.
+            body.innerHTML = state.runTraceCache[id];
+          } else {
+            renderTrace(id, body).then(function () {   // reuse the one trace renderer
+              state.runTraceCache[id] = body.innerHTML;
+            });
+          }
+        }
+        function setOpen(open) {
+          row.classList.toggle("open", open);
+          panel.hidden = !open;
+          head.setAttribute("aria-expanded", open ? "true" : "false");
+          row.querySelector(".run-caret").textContent = open ? "▾" : "▸";
+          if (open) {
+            state.expandedRuns[id] = true;
+            if (!row.dataset.loaded) { row.dataset.loaded = "1"; loadTrace(); }
+          } else {
+            delete state.expandedRuns[id];
+          }
+        }
+        head.addEventListener("click", function () { setOpen(!row.classList.contains("open")); });
+        if (state.expandedRuns[id]) setOpen(true);   // survive the 5s live refresh
+      });
+    }).catch(function (e) {
+      host.innerHTML = '<div class="rl-empty">Runs unavailable (' + esc(e.message) + '). Needs backend /runs or mock mode.</div>';
     });
   }
 

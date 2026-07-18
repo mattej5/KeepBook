@@ -57,7 +57,8 @@
       deleteDocument: function (id) {
         return j("/documents/" + id, { method: "DELETE" });
       },
-      getTimeline: function (hours) { return j("/stats/timeline?hours=" + (hours || 24)); }
+      getTimeline: function (hours) { return j("/stats/timeline?hours=" + (hours || 24)); },
+      getRuns: function (limit) { return j("/runs?limit=" + (limit || 20)); }
     };
   })();
 
@@ -70,6 +71,7 @@
     var state = null;      // {clients, documents, uploads, type_changes}
     var readyPromise = null;
     var timelineFixture = null;
+    var runsFixture = null;
 
     // What the shipped fixtures contribute to live stats — used to overlay
     // live deltas (demo-time corrections) onto the timeline fixture's 24h story.
@@ -88,6 +90,26 @@
 
     function persist() {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+    }
+
+    function loadRuns() {
+      if (runsFixture) return Promise.resolve(runsFixture);
+      return fetch("mock/runs.json").then(function (r) { return r.json(); })
+        .then(function (r) { runsFixture = r; return r; });
+    }
+
+    // Believable placeholder I/O for a synthesized mock trace call. The stage
+    // label is the real thing; the prompt/response text is illustrative only.
+    function mockPromptFor(stage, docType) {
+      if (stage === "classify") return "You are a tax-document classifier. Return STRICT JSON: {\"doc_type\": \"...\", \"handwritten\": true|false}.";
+      if (stage.indexOf("region:") === 0) return "Read only the highlighted region. Return STRICT JSON: {\"value\": \"...\"} for the field: " + stage.slice(7) + ".";
+      if (stage.indexOf("ensemble:") === 0) return "Cross-check extraction with " + stage.slice(9) + ". Return STRICT JSON for every field of a " + docType + ".";
+      return "Extract every field of this " + docType + ". Return STRICT JSON keyed by field.";
+    }
+    function mockResponseFor(stage, docType) {
+      if (stage === "classify") return JSON.stringify({ doc_type: docType, handwritten: false });
+      if (stage.indexOf("region:") === 0) return JSON.stringify({ value: "(re-read from crop)" });
+      return JSON.stringify({ note: "illustrative mock output" });
     }
 
     function ready() {
@@ -178,13 +200,41 @@
       // endpoint so the link works whenever a backend is actually serving.
       exportCsvUrl: function (clientId) { return "/clients/" + clientId + "/export.csv"; },
 
+      getRuns: function () {
+        return loadRuns().then(function (r) { return clone(r); });
+      },
+
       getTrace: function (id) {
-        return ready().then(function () {
+        // In mock mode a doc that appears in the runs fixture with a recorded
+        // trace gets synthesized calls (labelled with the same pipeline stages
+        // the row summarizes) so the row-expansion + stage labels are visible
+        // offline; a run with raw_available:false returns no calls, exercising
+        // the "no trace recorded" empty state. Everything is clearly "mock".
+        return Promise.all([ready(), loadRuns()]).then(function (res) {
           var d = state.documents.filter(function (x) { return x.id === id; })[0];
+          var run = (res[1].runs || []).filter(function (x) { return x.doc_id === id; })[0];
+          var calls = [];
+          if (run && run.raw_available && (run.stages || []).length) {
+            calls = run.stages.map(function (stage, i) {
+              var retry = i > 0 && stage === run.stages[i - 1];
+              var call = {
+                seq: i + 1, stage: stage,
+                prompt: mockPromptFor(stage, run.doc_type),
+                response: mockResponseFor(stage, run.doc_type)
+              };
+              if (retry) call.retry = true;
+              return call;
+            });
+          }
           return {
-            doc_id: id, model_runtime: "mock", model_name: "gemma4:e4b",
-            status: d ? d.status : "", doc_type: d ? d.doc_type : "",
-            latency_s: null, retried: false, calls: []
+            doc_id: id,
+            model_runtime: run ? run.model_runtime : "mock",
+            model_name: run ? run.model_name : "gemma4:e4b",
+            status: run ? run.status : (d ? d.status : ""),
+            doc_type: run ? run.doc_type : (d ? d.doc_type : ""),
+            latency_s: run ? run.latency_s : null,
+            retried: run ? !!run.retried : false,
+            calls: calls
           };
         });
       },
