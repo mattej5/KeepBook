@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KeepBook — on-device tax intake</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="wordmark">Keep<span class="dot">Book</span></div>
+    <nav class="nav" id="nav">
+      <button data-view="capture" class="active">Capture</button>
+      <button data-view="review">Review</button>
+      <button data-view="dashboard">Dashboard</button>
+    </nav>
+    <div class="header-spacer"></div>
+    <button class="reset-link" id="reset-btn" hidden>reset demo</button>
+    <div class="ondevice">On-device only</div>
+  </header>
+
+  <main>
+    <!-- ============ CAPTURE / SUBMIT ============ -->
+    <section class="view active" id="view-capture">
+      <div class="card">
+        <div class="card-pad">
+          <div class="screen-head">
+            <div>
+              <h1>Add files</h1>
+              <div class="sub">PDFs and scans already on this Mac. Forwarded by email? Save the attachment, then drop it here.</div>
+            </div>
+          </div>
+
+          <div class="dropzone" id="dropzone">
+            <div class="dz-icon"><span></span><span></span><span></span></div>
+            <div class="dz-title">Drop PDFs or images here</div>
+            <div class="dz-sub">or <span class="browse">browse this Mac</span></div>
+            <input type="file" id="file-input" multiple accept="image/*,.pdf" hidden>
+          </div>
+
+          <div id="queue-block"></div>
+
+          <div class="foot-row">
+            <div class="privacy-line">Processed on this Mac. Nothing is uploaded.</div>
+            <button class="btn" id="process-btn" disabled>Process files</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BIN REVIEW & CORRECTION ============ -->
+    <section class="view" id="view-review">
+      <div class="card">
+        <div class="card-pad">
+          <div class="screen-head">
+            <div>
+              <h1>Review &amp; confirm</h1>
+              <div class="sub">Each document: the source image beside what the model read. Nothing enters a client's checklist until you confirm it.</div>
+            </div>
+            <div class="privacy-line">Processed on this Mac. Nothing is uploaded.</div>
+          </div>
+          <div class="review-layout" style="margin-top:18px">
+            <div class="review-list" id="review-list"></div>
+            <div id="review-detail"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CHECKLIST DASHBOARD ============ -->
+    <section class="view" id="view-dashboard">
+      <div id="stats-line"></div>
+      <div class="client-grid" id="client-grid" style="margin-top:22px"></div>
+      <div class="privacy-line" style="margin-top:20px">Processed on this Mac. Nothing is uploaded.</div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

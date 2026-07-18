@@ -1,0 +1,451 @@
+/*
+ * KeepBook UI — three views over one api.js.
+ * Load-bearing bits: the correction render (strike + ink), the checklist
+ * state derivation (confirmed == checked), and the ink-in animation.
+ */
+(function () {
+  "use strict";
+  var api = window.KeepBookAPI;
+
+  /* ---------- field metadata ---------- */
+  var FIELD_LABELS = {
+    employer: "Employer", ein: "EIN", employee_name: "Employee", ssn: "SSN",
+    box1_wages: "Wages (Box 1)", box2_fed_withheld: "Fed. tax withheld (Box 2)",
+    payer: "Payer", recipient: "Recipient", recipient_tin: "Recipient TIN",
+    box1_interest: "Interest income (Box 1)", box4_fed_withheld: "Fed. tax withheld (Box 4)",
+    box1_nonemployee_comp: "Nonemployee comp. (Box 1)",
+    lender: "Lender", borrower: "Borrower", borrower_tin: "Borrower TIN",
+    box1_mortgage_interest: "Mortgage interest (Box 1)"
+  };
+  var DOC_TYPES = ["W-2", "1099-NEC", "1099-INT", "1099-MISC", "K-1", "1098"];
+  var TIN_FIELDS = { ssn: 1, recipient_tin: 1, borrower_tin: 1 };
+  function labelFor(k) { return FIELD_LABELS[k] || k; }
+  function isMoney(k) { return /^box|wages|interest|withheld|comp|income|mortgage/.test(k); }
+  function isTin(k) { return !!TIN_FIELDS[k]; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function maskTin(v) {
+    var d = String(v || "").replace(/\D/g, "");
+    if (d.length < 4) return v || "—";
+    return "•••-••-" + d.slice(-4);
+  }
+  function money(v) { return v === "" || v == null ? "—" : "$" + v; }
+
+  var CHECK_SVG = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="M4 13 L10 18.5 L21 4.5" fill="none" stroke="#2f5fd0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function checkSvgAnimated() {
+    return '<svg width="18" height="18" viewBox="0 0 24 24"><path class="ink-draw" d="M4 13 L10 18.5 L21 4.5" fill="none" stroke="#2f5fd0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+
+  /* ---------- app state ---------- */
+  var state = { view: "capture", dropped: [], polling: null, selectedDoc: null, clients: [], justConfirmed: {} };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+
+  /* ================= NAVIGATION ================= */
+  function show(view) {
+    state.view = view;
+    document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+    $("view-" + view).classList.add("active");
+    document.querySelectorAll("#nav button").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.view === view);
+    });
+    if (view === "capture") renderCapture();
+    if (view === "review") renderReview();
+    if (view === "dashboard") renderDashboard();
+  }
+
+  /* ================= CAPTURE / SUBMIT ================= */
+  function renderCapture() {
+    var block = $("queue-block");
+    if (!state.dropped.length && !state.processing) {
+      block.innerHTML = '<div class="section-label">Queued · 0 files</div>' +
+        '<div class="rl-empty">No files queued yet. Drop a client\'s documents above.</div>';
+      $("process-btn").disabled = true;
+      $("process-btn").textContent = "Process files";
+      return;
+    }
+    if (state.processing) return; // processing view is managed by the poll loop
+    var rows = state.dropped.map(function (f, i) {
+      var thumb = f._url
+        ? '<span class="qthumb"><img src="' + f._url + '" alt=""></span>'
+        : '<span class="qthumb"><span class="ext">' + esc((f.name.split(".").pop() || "").toUpperCase().slice(0, 3)) + '</span></span>';
+      return '<div class="qrow">' + thumb +
+        '<div class="meta"><div class="fname">' + esc(f.name) + '</div>' +
+        '<div class="fsub tnum">' + fmtSize(f.size) + '</div></div>' +
+        '<button class="btn-ghost btn-sm" data-rm="' + i + '">remove</button></div>';
+    }).join("");
+    block.innerHTML = '<div class="section-label">Queued · ' + state.dropped.length + ' file' +
+      (state.dropped.length === 1 ? "" : "s") + '</div>' + rows;
+    block.querySelectorAll("[data-rm]").forEach(function (b) {
+      b.onclick = function () { state.dropped.splice(+b.dataset.rm, 1); renderCapture(); };
+    });
+    $("process-btn").disabled = false;
+    $("process-btn").textContent = "Process " + state.dropped.length + " file" + (state.dropped.length === 1 ? "" : "s");
+  }
+
+  function fmtSize(n) {
+    if (!n && n !== 0) return "";
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return Math.round(n / 1024) + " KB";
+    return (n / 1048576).toFixed(1) + " MB";
+  }
+
+  function addFiles(list) {
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (f.type && f.type.indexOf("image") === 0) { try { f._url = URL.createObjectURL(f); } catch (e) {} }
+      state.dropped.push(f);
+    }
+    renderCapture();
+  }
+
+  function startProcessing() {
+    var files = state.dropped.slice();
+    if (!files.length) return;
+    state.processing = { total: files.length };
+    state.dropped = [];
+    api.intake(files).then(function () { pollQueue(true); });
+    renderProcessing({ pending: files.length, processing: null, done: 0 });
+    $("process-btn").disabled = true;
+    $("process-btn").textContent = "Processing…";
+  }
+
+  function renderProcessing(q) {
+    var total = state.processing ? state.processing.total : (q.pending + q.done);
+    var doneCount = q.done;
+    var pct = total ? Math.round((doneCount / total) * 100) : 0;
+    var rows = "";
+    for (var i = 0; i < total; i++) {
+      var label, cls;
+      if (i < doneCount) { label = "extracted"; cls = "done"; }
+      else if (i === doneCount && q.pending > 0) { label = "reading…"; cls = "processing"; }
+      else { label = "queued"; cls = "done"; }
+      rows += '<div class="qrow"><span class="qthumb"><span class="ext">DOC</span></span>' +
+        '<div class="meta"><div class="fname">Document ' + (i + 1) + '</div>' +
+        '<div class="fsub">Gemma 4 · on-device</div></div>' +
+        '<span class="qstatus ' + cls + '">' + label + '</span></div>';
+    }
+    $("queue-block").innerHTML =
+      '<div class="section-label">Processing on this Mac · ' + doneCount + ' of ' + total + '</div>' +
+      '<div class="progress-wrap"><div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div></div>' +
+      '<div style="margin-top:12px">' + rows + '</div>';
+  }
+
+  function pollQueue(immediate) {
+    if (state.polling) clearInterval(state.polling);
+    function step() {
+      api.getQueue().then(function (q) {
+        if (state.view === "capture") renderProcessing(q);
+        if (q.pending === 0) {
+          clearInterval(state.polling); state.polling = null;
+          var n = state.processing ? state.processing.total : q.done;
+          state.processing = null;
+          $("process-btn").disabled = true;
+          $("process-btn").textContent = "Process files";
+          if (state.view === "capture") {
+            $("queue-block").innerHTML =
+              '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
+              '<div class="rl-empty">Sorted into per-client bins. <a href="#" id="to-review">Review them →</a></div>';
+            var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
+          }
+          toast(n + " document" + (n === 1 ? "" : "s") + " ready in Review");
+        }
+      });
+    }
+    if (immediate) step();
+    state.polling = setInterval(step, 2000);
+  }
+
+  /* ================= BIN REVIEW & CORRECTION ================= */
+  function renderReview() {
+    api.getDocuments().then(function (docs) {
+      var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized"; });
+      var listEl = $("review-list");
+      if (!needs.length) {
+        listEl.innerHTML = '<div class="rl-empty">Nothing to review. All caught up.</div>';
+        $("review-detail").innerHTML = '<div class="rl-empty">Confirmed documents flow to the Dashboard checklist.</div>';
+        return;
+      }
+      // keep selection valid
+      if (!state.selectedDoc || !needs.some(function (d) { return d.id === state.selectedDoc; })) {
+        state.selectedDoc = needs[0].id;
+      }
+      listEl.innerHTML = needs.map(function (d) {
+        var badge = d.status === "unrecognized"
+          ? '<span class="rl-badge unrec">Unrecognized</span>'
+          : '<span class="rl-badge needs">Needs review</span>';
+        var client = clientName(d.client_id) || "Unassigned";
+        var typ = d.status === "unrecognized" ? "Unknown document" : d.doc_type;
+        return '<button class="rl-item ' + (d.id === state.selectedDoc ? "active" : "") + '" data-id="' + d.id + '">' +
+          '<div class="rl-type">' + esc(typ) + '</div>' +
+          '<div class="rl-client">' + esc(client) + '</div>' + badge + '</button>';
+      }).join("");
+      listEl.querySelectorAll("[data-id]").forEach(function (b) {
+        b.onclick = function () { state.selectedDoc = b.dataset.id; renderReview(); };
+      });
+      renderDetail(state.selectedDoc);
+    });
+  }
+
+  function clientName(id) {
+    var c = state.clients.filter(function (x) { return x.id === id; })[0];
+    return c ? c.name : null;
+  }
+
+  function renderDetail(id) {
+    api.getDocument(id).then(function (doc) {
+      var el = $("review-detail");
+      var imgUrl = api.imageUrl(doc);
+      var imgHtml = imgUrl
+        ? '<div class="doc-image"><img src="' + imgUrl + '" alt="source document"></div>'
+        : '<div class="doc-image"><div class="noimg">No preview available</div></div>';
+
+      var confirmed = doc.status === "confirmed";
+      var unrec = doc.status === "unrecognized";
+      var right = "";
+
+      var heading = unrec ? "Unrecognized document" : doc.doc_type;
+      right += '<h2>' + esc(heading) + '</h2>';
+      right += '<div class="doc-sub">' + (confirmed
+        ? 'Confirmed · in ' + esc(clientName(doc.client_id) || "—") + '\'s file'
+        : 'Model read this ' + (unrec ? 'file' : doc.doc_type + '. Check it against the image, correct anything wrong, then confirm.')) + '</div>';
+
+      if (unrec && !confirmed) {
+        right += '<div class="unrec-banner">The model would not force this into a tax-form type. Classify it by hand if it belongs to a client, or leave it here.</div>';
+      }
+
+      // client + doc_type pickers (needed to confirm; per docs/API.md /confirm)
+      if (!confirmed) {
+        right += '<div class="doc-type-picker">';
+        if (unrec) {
+          right += '<label>Document type</label><select class="select" id="pick-type">' +
+            '<option value="">Choose type…</option>' +
+            DOC_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join("") +
+            '</select>';
+        }
+        right += '<label>Client</label><select class="select" id="pick-client">' +
+          '<option value="">Choose client…</option>' +
+          state.clients.map(function (c) {
+            var sel = c.id === doc.client_id ? " selected" : "";
+            return '<option value="' + c.id + '"' + sel + '>' + esc(c.name) + '</option>';
+          }).join("") +
+          '</select></div>';
+      }
+
+      // fields
+      var keys = Object.keys(doc.fields || {});
+      if (keys.length) {
+        right += '<div class="field-list">';
+        keys.forEach(function (k) {
+          var f = doc.fields[k];
+          right += '<div class="field-row"><div class="field-label">' + esc(labelFor(k)) + '</div><div>';
+          if (isTin(k)) {
+            right += '<div class="field-val tnum">' + esc(maskTin(f.value)) + '</div>';
+          } else if (confirmed && f.corrected) {
+            right += correctionHtml(k, f);
+          } else if (confirmed) {
+            right += '<div class="field-val tnum">' + esc(isMoney(k) ? money(f.value) : f.value || "—") + '</div>';
+          } else {
+            var lc = f.low_confidence ? " lowconf" : "";
+            right += '<input class="field-input' + lc + '" data-field="' + k + '" value="' + esc(f.value) + '">';
+            if (f.low_confidence) right += '<div class="lowconf-note">low confidence — check the photo</div>';
+          }
+          right += '</div></div>';
+        });
+        right += '</div>';
+      } else if (!unrec) {
+        right += '<div class="rl-empty">No fields extracted.</div>';
+      }
+
+      // footer
+      right += '<div class="detail-foot">';
+      if (confirmed) {
+        right += '<div style="display:flex;align-items:center;gap:8px;color:var(--ink-blue);font-weight:600;font-size:14px">' +
+          CHECK_SVG + ' Confirmed — checklist updated</div>' +
+          '<button class="btn-ghost btn-sm" id="to-dash">See it on the Dashboard →</button>';
+      } else {
+        right += '<div class="privacy-line">Confirming files this into the client\'s checklist.</div>' +
+          '<button class="btn btn-sm" id="confirm-btn">Confirm ' + (unrec ? "document" : doc.doc_type) + '</button>';
+      }
+      right += '</div>';
+
+      el.className = "detail";
+      el.innerHTML = imgHtml + '<div class="fields">' + right + '</div>';
+
+      var cb = $("confirm-btn"); if (cb) cb.onclick = function () { doConfirm(doc); };
+      var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
+    });
+  }
+
+  function correctionHtml(k, f) {
+    var oldV = isMoney(k) ? money(f.original_value) : f.original_value;
+    var newV = isMoney(k) ? money(f.value) : f.value;
+    return '<div class="correction"><span class="old tnum">' + esc(oldV) + '</span>' +
+      '<span class="new tnum">' + esc(newV) + '</span>' +
+      '<span class="pen-note">corrected</span></div>';
+  }
+
+  function doConfirm(doc) {
+    var typeSel = $("pick-type");
+    var clientSel = $("pick-client");
+    var docType = typeSel ? typeSel.value : doc.doc_type;
+    var clientId = clientSel ? clientSel.value : doc.client_id;
+    if (!docType || docType === "UNRECOGNIZED") { toast("Pick a document type first"); return; }
+    if (!clientId) { toast("Pick a client first"); return; }
+
+    var fields = {};
+    document.querySelectorAll("[data-field]").forEach(function (inp) {
+      fields[inp.dataset.field] = inp.value.trim();
+    });
+
+    api.confirm(doc.id, { client_id: clientId, doc_type: docType, fields: fields }).then(function (updated) {
+      // remember for the dashboard ink-in animation
+      state.justConfirmed[clientId + "|" + updated.doc_type] = true;
+      var anyCorrected = Object.keys(updated.fields).some(function (kk) { return updated.fields[kk].corrected; });
+      toast(anyCorrected ? "Correction saved — value struck, checklist updated" : "Confirmed — checklist updated");
+      state.selectedDoc = updated.id;         // keep detail showing the confirmed doc (with corrections)
+      renderDetail(updated.id);
+      // refresh the list so the confirmed doc drops out of "needs review"
+      api.getDocuments().then(function (docs) {
+        var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized"; });
+        var listEl = $("review-list");
+        listEl.innerHTML = needs.length ? needs.map(function (d) {
+          var badge = d.status === "unrecognized"
+            ? '<span class="rl-badge unrec">Unrecognized</span>'
+            : '<span class="rl-badge needs">Needs review</span>';
+          return '<button class="rl-item" data-id="' + d.id + '"><div class="rl-type">' +
+            esc(d.status === "unrecognized" ? "Unknown document" : d.doc_type) + '</div>' +
+            '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + '</button>';
+        }).join("") : '<div class="rl-empty">Nothing left to review. All caught up.</div>';
+        listEl.querySelectorAll("[data-id]").forEach(function (b) {
+          b.onclick = function () { state.selectedDoc = b.dataset.id; renderReview(); };
+        });
+      });
+    }).catch(function (e) { toast("Confirm failed: " + e.message); });
+  }
+
+  /* ================= CHECKLIST DASHBOARD ================= */
+  function renderDashboard() {
+    Promise.all([api.getClients(), api.getDocuments(), api.getStats()]).then(function (res) {
+      var clients = res[0], docs = res[1], stats = res[2];
+      state.clients = clients;
+      renderStats(stats);
+
+      var grid = $("client-grid");
+      grid.innerHTML = clients.map(function (c) { return clientCardHtml(c, docs); }).join("");
+
+      grid.querySelectorAll("[data-req]").forEach(function (b) {
+        b.onclick = function () { toast("Chase email drafted for " + b.dataset.req); };
+      });
+      // one-shot ink animations consumed on render
+      state.justConfirmed = {};
+    });
+  }
+
+  function clientCardHtml(c, docs) {
+    var received = {};
+    (c.received_docs || []).forEach(function (t) { received[t] = true; });
+
+    // docs of this client currently in review (extracted, not yet confirmed)
+    var inReview = {};
+    docs.forEach(function (d) {
+      if (d.client_id === c.id && d.status === "extracted") inReview[d.doc_type] = d;
+    });
+    // metadata for received docs (date / correction count)
+    var meta = {};
+    docs.forEach(function (d) {
+      if (d.client_id === c.id && d.status === "confirmed") {
+        var corr = Object.keys(d.fields || {}).filter(function (k) { return d.fields[k].corrected; }).length;
+        meta[d.doc_type] = { date: d.received_date, corr: corr };
+      }
+    });
+
+    var total = c.expected_docs.length;
+    var haveCount = c.expected_docs.filter(function (t) { return received[t]; }).length;
+    var complete = haveCount === total;
+
+    var rows = c.expected_docs.map(function (t) {
+      if (received[t]) {
+        var animate = state.justConfirmed[c.id + "|" + t];
+        var m = meta[t] || {};
+        var sub = "Received" + (m.date ? " " + m.date : "") + (m.corr ? " · " + m.corr + " correction" + (m.corr > 1 ? "s" : "") : "");
+        return '<div class="check-row' + (animate ? " row-settle" : "") + '">' +
+          '<span class="check-box done">' + (animate ? checkSvgAnimated() : CHECK_SVG) + '</span>' +
+          '<div class="grow"><div class="c-label">' + esc(t) + '</div><div class="c-sub">' + esc(sub) + '</div></div></div>';
+      }
+      if (inReview[t]) {
+        return '<div class="check-row pending"><span class="check-box"></span>' +
+          '<div class="grow"><div class="c-label">' + esc(t) + '</div>' +
+          '<div class="c-sub">In review — waiting on your confirm</div></div>' +
+          '<span class="pending-flag">in review</span></div>';
+      }
+      return '<div class="check-row missing"><span class="check-box"></span>' +
+        '<div class="grow"><div class="c-label">' + esc(t) + '</div>' +
+        '<div class="c-sub">Not received yet</div></div>' +
+        '<span class="missing-flag">MISSING</span>' +
+        '<button class="request-link" data-req="' + esc(c.name) + '" style="margin-left:12px">Request</button></div>';
+    }).join("");
+
+    var badge = complete
+      ? '<span class="client-badge-complete">all in ✓</span>'
+      : '';
+
+    return '<div class="card client-card"><div class="card-pad">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">' +
+      '<div class="client-name">' + esc(c.name) + '</div>' + badge + '</div>' +
+      '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
+      rows + '</div></div>';
+  }
+
+  function renderStats(s) {
+    var rate = (s.correction_rate * 100).toFixed(1) + "%";
+    $("stats-line").innerHTML =
+      '<div class="stats-bar">' +
+      '<div class="stat"><span class="num tnum">' + s.fields_extracted + '</span><span class="lbl">fields extracted</span></div>' +
+      '<div class="stat"><span class="num tnum">' + s.fields_corrected + '</span><span class="lbl">fields corrected</span></div>' +
+      '<div class="stat"><span class="num rate tnum">' + rate + '</span><span class="lbl">correction rate</span></div>' +
+      '<span class="stats-note">measured on real documents</span>' +
+      '</div>';
+  }
+
+  /* ================= BOOT ================= */
+  function boot() {
+    // nav
+    document.querySelectorAll("#nav button").forEach(function (b) {
+      b.onclick = function () { show(b.dataset.view); };
+    });
+    // reset (mock only)
+    if (api.MOCK && api.resetMock) {
+      var rb = $("reset-btn"); rb.hidden = false;
+      rb.onclick = function () { api.resetMock(); location.reload(); };
+    }
+    // drop zone
+    var dz = $("dropzone"), fi = $("file-input");
+    dz.onclick = function () { fi.click(); };
+    fi.onchange = function () { if (fi.files.length) addFiles(fi.files); fi.value = ""; };
+    ["dragenter", "dragover"].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add("dragover"); });
+    });
+    ["dragleave", "drop"].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove("dragover"); });
+    });
+    dz.addEventListener("drop", function (e) {
+      if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+    $("process-btn").onclick = startProcessing;
+
+    // preload clients so review/dashboard have names
+    api.getClients().then(function (cs) { state.clients = cs; });
+
+    // deep-link to a starting view
+    var v = new URLSearchParams(location.search).get("view");
+    show(v && $("view-" + v) ? v : "capture");
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
