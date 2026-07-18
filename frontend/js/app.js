@@ -353,6 +353,10 @@
         : '<div class="doc-image"><div class="noimg">No preview available</div></div>';
 
       var confirmed = doc.status === "confirmed";
+      // The strike-draw only plays on the confirm MOMENT — same one-shot key the
+      // dashboard ink-in uses (set in doConfirm, consumed by renderDashboard).
+      // Later re-renders of an already-confirmed doc render the settled strike.
+      var fresh = confirmed && !!state.justConfirmed[doc.client_id + "|" + doc.doc_type];
       var errored = doc.status === "error";
       var unrec = doc.status === "unrecognized";
       var classifyOnly = isClassifyOnly(doc.doc_type);
@@ -424,7 +428,7 @@
           if (isTin(k)) {
             right += '<div class="field-val tnum">' + esc(maskTin(f.value)) + '</div>';
           } else if (confirmed && f.corrected) {
-            right += correctionHtml(k, f);
+            right += correctionHtml(k, f, fresh);
           } else if (confirmed) {
             right += '<div class="field-val tnum">' + esc(isMoney(k) ? money(f.value) : f.value || "—") + '</div>';
           } else {
@@ -517,10 +521,10 @@
     });
   }
 
-  function correctionHtml(k, f) {
+  function correctionHtml(k, f, fresh) {
     var oldV = isMoney(k) ? money(f.original_value) : f.original_value;
     var newV = isMoney(k) ? money(f.value) : f.value;
-    return '<div class="correction"><span class="old tnum">' + esc(oldV) + '</span>' +
+    return '<div class="correction' + (fresh ? " fresh" : "") + '"><span class="old tnum">' + esc(oldV) + '</span>' +
       '<span class="new tnum">' + esc(newV) + '</span>' +
       '<span class="pen-note">corrected</span></div>';
   }

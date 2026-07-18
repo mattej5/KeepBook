@@ -230,12 +230,24 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 
 /* the correction render — struck original + ink-blue corrected */
 .correction { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 6px; font-variant-numeric: tabular-nums; }
-.correction .old {
-  color: var(--red); text-decoration: line-through;
-  text-decoration-color: var(--red); text-decoration-thickness: 2px;
+/* Strike is drawn as a pseudo-line (not text-decoration) so it can animate a
+   left-to-right pen stroke. Base state = fully struck; reduced-motion lands here. */
+.correction .old { position: relative; color: var(--red); }
+.correction .old::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  height: 2px; background: var(--red);
+  transform: scaleX(1); transform-origin: left;
 }
 .correction .new { color: var(--ink-blue); font-weight: 700; }
 .correction .pen-note { font-family: var(--font-hand); font-size: 16px; color: var(--red); }
+
+/* Fresh confirm only: pen strikes the old value L→R, then the corrected value
+   and note settle in ~180ms behind it. Gated by .fresh (JS state.justConfirmed). */
+.correction.fresh .old::after { animation: strike-draw .32s ease forwards; }
+.correction.fresh .new,
+.correction.fresh .pen-note { animation: ink-fade-in .3s ease .18s backwards; }
+@keyframes strike-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ink-fade-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
 .doc-type-picker { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
 .doc-type-picker label { font-size: 12px; font-weight: 600; color: var(--muted); }
