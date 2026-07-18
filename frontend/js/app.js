@@ -58,7 +58,7 @@
   }
 
   /* ---------- app state ---------- */
-  var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {} };
+  var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {}, knownReviewIds: {} };
 
   var $ = function (id) { return document.getElementById(id); };
   function toast(msg) {
@@ -281,6 +281,10 @@
       if (!state.selectedDoc || !needs.some(function (d) { return d.id === state.selectedDoc; })) {
         state.selectedDoc = needs[0].id;
       }
+      // Cards settle in only on ARRIVAL: a doc whose id we haven't shown before
+      // gets .card-land once. Selection re-renders reuse the same ids, so nothing
+      // re-animates — same one-shot discipline as state.justConfirmed.
+      var landIdx = 0;
       listEl.innerHTML = needs.map(function (d) {
         var badge = d.status === "error"
           ? '<span class="rl-badge error">Error</span>'
@@ -289,10 +293,13 @@
             : '<span class="rl-badge needs">Needs review</span>';
         var client = clientName(d.client_id) || "Unassigned";
         var typ = d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type;
-        return '<button class="rl-item ' + (d.id === state.selectedDoc ? "active" : "") + '" data-id="' + d.id + '">' +
+        var isNew = !state.knownReviewIds[d.id];
+        var landAttr = isNew ? ' style="animation-delay:' + Math.min(landIdx++, 6) * 40 + 'ms"' : '';
+        return '<button class="rl-item' + (isNew ? " card-land" : "") + (d.id === state.selectedDoc ? " active" : "") + '" data-id="' + d.id + '"' + landAttr + '>' +
           '<div class="rl-type">' + esc(typ) + pageLabel(d) + '</div>' +
           '<div class="rl-client">' + esc(client) + '</div>' + badge + '</button>';
       }).join("");
+      needs.forEach(function (d) { state.knownReviewIds[d.id] = 1; });
       listEl.querySelectorAll("[data-id]").forEach(function (b) {
         b.onclick = function () { state.selectedDoc = b.dataset.id; renderReview(); };
       });

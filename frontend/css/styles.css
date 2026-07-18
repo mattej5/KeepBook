@@ -358,6 +358,12 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 @keyframes ink-in { from { stroke-dashoffset: 32; } to { stroke-dashoffset: 0; } }
 .ink-draw { stroke-dasharray: 32; stroke-dashoffset: 32; animation: ink-in .6s ease .15s forwards; }
 
+/* Review card settle-in — plays once, only on a doc's first appearance (JS gates
+   the class via state.knownReviewIds). Base state = settled, so reduced-motion
+   simply lands here. */
+.rl-item.card-land { animation: card-land .36s ease backwards; }
+@keyframes card-land { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
 /* ---------- Stats line ---------- */
 .stats-bar {
   display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
@@ -413,4 +419,17 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 @media (max-width: 760px) {
   .review-layout { grid-template-columns: 1fr; }
   .detail { grid-template-columns: 1fr; }
+}
+
+/* ---------- Reduced motion ---------- */
+/* One switch zeroes every CSS animation/transition. Every animated element's
+   base rule is authored at its settled state, so collapsing the duration lands
+   on the correct final frame (JS count-up self-guards via matchMedia). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
 }
