@@ -13,7 +13,10 @@ All model access goes through one adapter — `backend/model_runtime.py`, exposi
 | `MODEL_RUNTIME` | `ollama` | `ollama` or `courier` |
 | `MODEL_NAME` | `gemma4:e4b` | model tag passed through to the runtime |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama base URL — non-Mac dev machines point this at the model host over Tailscale (README "Models") |
-| `COURIER_BASE_URL` | unset | OpenAI-compatible base URL for Courier OS, e.g. `http://localhost:<port>/v1` |
+| `COURIER_BASE_URL` | unset | OpenAI-compatible base URL for Courier OS — verified port is `http://localhost:9100/v1` |
+| `COURIER_API_KEY` | unset | Courier requires `Authorization: Bearer <key>` on `/v1/*` (key comes from the account dashboard). Ollama needs no auth. |
+
+Courier naming note (from docs research, Sat morning): Courier matches `model` case-insensitively against the workbench display name — `"Gemma 4 E4B"`, not `gemma4:e4b`. Either set `MODEL_NAME="Gemma 4 E4B"` when `MODEL_RUNTIME=courier`, or give the model a `gemma4:e4b` nickname in the Courier workbench. Its docs never show the standard `image_url` content-part shape — the first real image request (T41) confirms or kills the swap.
 
 **ollama shape** (see `eval/run_test.py` for the verified reference call):
 `POST {OLLAMA_HOST}/api/generate` with `{"model": MODEL_NAME, "prompt": prompt, "images": [image_b64], "stream": false, "options": {"temperature": 0}}` → read `response`.
