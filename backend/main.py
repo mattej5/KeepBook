@@ -367,6 +367,22 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def _no_stale_frontend(request: Request, call_next):
+    """Force revalidation on the app shell (html/js/css/manifest).
+
+    The no-build frontend changed many times today and Chrome's heap cache kept
+    serving stale app.js against fresh index.html — buttons that render but do
+    nothing. no-cache still allows 304s via ETag, so this costs one conditional
+    request, not a re-download. Images keep default caching.
+    """
+    response = await call_next(request)
+    p = request.url.path
+    if p == "/" or p.endswith((".html", ".js", ".css", ".json")):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.on_event("startup")
 def _startup() -> None:
     global STARTED_AT, GIT_SHA

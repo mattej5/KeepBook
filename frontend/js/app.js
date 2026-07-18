@@ -739,11 +739,9 @@
           toast("Draft opened in your mail app");
         };
       });
-      // "+ New client" lives on a FAB (always reachable however long the grid
-      // scrolls); the create form itself renders as a full-row card in the grid.
+      // The create form renders as a full-row card in the grid; its trigger is
+      // the static "Add Client" FAB, bound once in boot().
       appendNewClientCard();
-      var fab = $("fab-new-client");
-      if (fab) fab.onclick = openNewClientForm;
       // one-shot ink animations consumed on render
       state.justConfirmed = {};
     });
@@ -1196,6 +1194,9 @@
       if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
     });
     $("process-btn").onclick = startProcessing;
+    // Add Client FAB is static markup — bind once here, not per dashboard render.
+    var fab = $("fab-new-client");
+    if (fab) fab.onclick = openNewClientForm;
 
     // preload clients so review/dashboard have names
     api.getClients().then(function (cs) { state.clients = cs; });
