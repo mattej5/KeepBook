@@ -2,3 +2,10 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 # Model calls use the stdlib (urllib) per docs/API.md — no model SDK needed.
+httpx==0.28.1
+pytest==9.0.3
+# Intake image preprocessing (backend/preprocess.py): document-region crop,
+# perspective/deskew, illumination flattening, upscale. cv2 pulls numpy.
+opencv-python-headless==4.11.0.86
+Pillow==12.3.0
+numpy==2.5.1
