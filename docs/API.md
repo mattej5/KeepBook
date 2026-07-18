@@ -82,7 +82,7 @@ Rule: a checklist item is satisfied only by a **confirmed** document. Unrecogniz
 The backend appends one line per pipeline event to `backend/events.jsonl` (gitignored, append-only — this is the "stringent log"; the UI shows only a rolling window):
 
 ```jsonc
-{"ts": "2026-07-18T09:14:02Z", "type": "extracted", "doc_id": "doc_007", "doc_type": "W-2", "latency_s": 19.2, "fields_total": 5, "retried": false}
+{"ts": "2026-07-18T09:14:02Z", "type": "extracted", "doc_id": "doc_007", "doc_type": "W-2", "latency_s": 19.2, "fields_total": 5, "fields_low_confidence": 1, "retried": false}
 {"ts": "2026-07-18T09:15:40Z", "type": "confirmed", "doc_id": "doc_007", "doc_type": "W-2", "fields_corrected": 1, "corrected_keys": ["box2_fed_withheld"], "manual_type_change": false}
 ```
 
@@ -95,6 +95,7 @@ The backend appends one line per pipeline event to `backend/events.jsonl` (gitig
   "totals": {
     "docs_processed": 31, "fields_extracted": 214,
     "fields_corrected": 9, "correction_rate": 0.042,
+    "fields_low_confidence": 17,
     "first_try_type_acc": 0.94,          // confirmed doc_type == extracted doc_type
     "median_latency_s": 19.2,
     "corrections_by_category": {"money": 4, "tin_ssn": 2, "names": 2, "doc_type": 1}
