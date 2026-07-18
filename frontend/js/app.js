@@ -82,6 +82,9 @@
   /* ================= NAVIGATION ================= */
   function show(view) {
     state.view = view;
+    // Hash routing: refresh keeps the current view (replaceState — no history spam).
+    if (location.hash !== "#" + view) history.replaceState(null, "", "#" + view);
+    refreshNavBadge();
     if (state.nerdsTimer) { clearInterval(state.nerdsTimer); state.nerdsTimer = null; }
     document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
     $("view-" + view).classList.add("active");
@@ -142,6 +145,17 @@
     var el = $("capture-op"); if (!el) return;
     api.getDocuments().then(function (docs) {
       var e = $("capture-op"); if (e) e.textContent = opSummary(docs);
+    }).catch(function () {});
+  }
+
+  // Sidebar Review badge — the "N docs are waiting on you" signal. Refreshed on
+  // every nav and piggybacked on render paths so confirms/deletes update it.
+  function refreshNavBadge() {
+    api.getDocuments().then(function (docs) {
+      var n = (docs || []).filter(needsReview).length;
+      var b = $("nav-review-badge"); if (!b) return;
+      b.hidden = n === 0;
+      b.textContent = String(n);
     }).catch(function () {});
   }
 
@@ -1109,9 +1123,15 @@
     // preload clients so review/dashboard have names
     api.getClients().then(function (cs) { state.clients = cs; });
 
-    // deep-link to a starting view
-    var v = new URLSearchParams(location.search).get("view");
-    show(v && $("view-" + v) ? v : "capture");
+    // starting view: hash route first (refresh-stable), then legacy ?view=,
+    // then the dashboard — the screen the user lives in.
+    var h = (location.hash || "").replace("#", "");
+    var v = h || new URLSearchParams(location.search).get("view");
+    show(v && $("view-" + v) ? v : "dashboard");
+    window.addEventListener("hashchange", function () {
+      var hv = (location.hash || "").replace("#", "");
+      if (hv && $("view-" + hv) && hv !== state.view) show(hv);
+    });
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

@@ -81,8 +81,15 @@ a:hover { color: var(--ink-blue-dk); }
 .brand-logo.loaded { display: block; }
 .brand-logo.loaded ~ .wordmark { display: none; }
 /* Square mark: shows beside the wordmark (does not replace it). If the full
-   logo.svg also loads, the mark yields to it to avoid double-branding. */
-.brand-mark { display: none; height: 34px; width: auto; }
+   logo.svg also loads, the mark yields to it to avoid double-branding.
+   Sticker treatment: the mark's cream pages sat flat on the cream rail, so it
+   gets its own white tile + line border + soft shadow, like a sticker on the
+   ledger's cover. */
+.brand-mark {
+  display: none; height: 34px; width: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 7px;
+  padding: 3px; box-shadow: var(--shadow-soft);
+}
 .brand-mark.loaded { display: block; }
 .brand-mark.loaded ~ .brand-logo.loaded { margin-left: -2px; }
 
@@ -99,6 +106,13 @@ a:hover { color: var(--ink-blue-dk); }
   transition: background .15s, color .15s;
 }
 .nav-ico { flex: none; width: 17px; height: 17px; }
+/* Review badge: how many docs wait on the reviewer. Hidden at zero. */
+.nav-badge {
+  margin-left: auto; min-width: 20px; text-align: center;
+  font-size: 11px; font-weight: 700; line-height: 1;
+  color: var(--card); background: var(--ink-blue);
+  border-radius: 999px; padding: 4px 6px;
+}
 .nav button:hover { background: #00000008; color: var(--ink); }
 .nav button.active { color: var(--ink-blue); background: #2f5fd014; }
 /* bookmark-ribbon left edge on the active row */
