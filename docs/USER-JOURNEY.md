@@ -35,6 +35,10 @@ Her two daily questions:
 
 The last row is the point: the alternative wasn't "worse AI," it was **no AI at all**, because Maria could never sign off on sending a client's identity to a third party. Local inference doesn't make the product private. It makes the product *possible*.
 
-## Demo mapping (3 minutes)
+## Demo mapping (3 minutes) — hybrid: 30s story cold-open, then feature tour
 
-The demo IS this journey, compressed: hook with the 7:45 inbox (drop the folder live), review-and-correct one wrong field on stage, land on the checklist inking itself in, close on "and nothing left this Mac."
+- **0:00–0:30 — Cold open in Maria's shoes.** "It's February 12th. Nine attachments overnight. Her choice tonight is retype them by hand or paste a client's SSN into a chat tab with no data processing agreement." **Drop the folder live at ~0:20** so the queue processes behind the rest of the demo.
+- **0:30–1:45 — Feature tour.** Capture screen ("Processed on this Mac. Nothing is uploaded."), bins filling as docs classify, then the review screen: confirm one clean extraction, catch the wrong one — red-pen strike, ink-blue correction — and show the misfit receipt sitting in Unrecognized instead of being force-fit.
+- **1:45–2:20 — Checklist dashboard.** A client's row inks itself complete; another shows K-1 still missing. Stats line: fields extracted, fields corrected — the live correction-rate metric.
+- **2:20–3:00 — Evidence + close.** Kill test in one line (e2b's confident wrong number vs e4b's 6/6), eval-harness numbers across the 26-doc test set, and the closer: "every byte stayed on this Mac."
+- **Fallback:** a pre-processed session state stands ready if live processing stalls; rehearse both paths.
