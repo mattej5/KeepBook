@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="KeepBook">
+  <!-- warm cream rounded square with charcoal outline -->
+  <rect x="3" y="3" width="58" height="58" rx="14"
+        fill="#faf8f2" stroke="#1c2a3a" stroke-width="2.5"/>
+  <!-- hand-drawn ink-blue confirmation check -->
+  <path d="M16 33 Q21 39 27 46 Q37 30 50 17"
+        fill="none" stroke="#2f5fd0" stroke-width="7.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

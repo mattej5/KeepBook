@@ -3,12 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="On-device tax document intake. KeepBook reads scans and photos, extracts fields, and builds per-client checklists locally on your Mac. Nothing is uploaded.">
   <title>KeepBook — on-device tax intake</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header class="app-header">
-    <div class="wordmark">Keep<span class="dot">Book</span></div>
+    <div class="brand">
+      <!-- Drop frontend/assets/logo.svg to replace the text wordmark (zero code change).
+           No logo present -> img errors, removes itself, the text wordmark below shows. -->
+      <img class="brand-logo" src="assets/logo.svg" alt="KeepBook"
+           onload="this.classList.add('loaded')" onerror="this.remove()">
+      <div class="wordmark">Keep<span class="dot">Book</span></div>
+    </div>
     <nav class="nav" id="nav">
       <button data-view="capture" class="active">Capture</button>
       <button data-view="review">Review</button>
