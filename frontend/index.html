@@ -9,7 +9,13 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="wordmark">Keep<span class="dot">Book</span></div>
+    <div class="brand">
+      <!-- Drop frontend/assets/logo.svg to replace the text wordmark (zero code change).
+           No logo present -> img errors, removes itself, the text wordmark below shows. -->
+      <img class="brand-logo" src="assets/logo.svg" alt="KeepBook"
+           onload="this.classList.add('loaded')" onerror="this.remove()">
+      <div class="wordmark">Keep<span class="dot">Book</span></div>
+    </div>
     <nav class="nav" id="nav">
       <button data-view="capture" class="active">Capture</button>
       <button data-view="review">Review</button>

@@ -71,6 +71,13 @@ a:hover { color: var(--ink-blue-dk); }
 }
 .wordmark .dot { color: var(--ink-blue); }
 
+/* Logo slot: text wordmark is the default; a dropped assets/logo.svg supersedes it.
+   img stays hidden until it actually loads, so no broken-image box ever flashes. */
+.brand { display: flex; align-items: center; }
+.brand-logo { display: none; height: 34px; width: auto; }
+.brand-logo.loaded { display: block; }
+.brand-logo.loaded + .wordmark { display: none; }
+
 .nav { display: flex; gap: 6px; margin-left: 8px; }
 .nav button {
   font-family: var(--font-sans);
