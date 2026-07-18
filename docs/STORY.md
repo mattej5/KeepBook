@@ -44,7 +44,19 @@ Everything we caught, prevented, or fixed tonight, recorded so no context window
 - Tool A/Bs (preprocessing; re-ask; cascade): [pending — keep only what beat its gate]
 - Live product metric: correction rate surfaced in-app ("the red-pen rate is the number to watch").
 
-**How to present the 43.6%:** never apologize for it. Classification is perfect; extraction is fallible and fails *silently* on money fields — which is the entire argument for mandatory review. The honest number IS the pitch. If the tool A/Bs improved it, tell it as an arc: baseline → measured intervention → new number, all reproducible from `eval/`.
+**How to present the 43.6%:** it's the *baseline*, not the product — never apologize for it, and never leave it as the last word. Classification is perfect; extraction is fallible and fails *silently* on money fields — the entire argument for mandatory review. Then show the arc.
+
+## The recursive improvement loop (ran until the 1 PM freeze)
+
+Each round: run the eval → break misses down by failure class → aim one targeted, principled tool at the biggest class → re-measure → keep only what beats a pre-declared numeric gate. No prompt-hacking toward test answers; interventions must generalize (preprocessing, validation-triggered re-asks, model routing).
+
+- Round 0: e4b + e2b baselines (the kill test at n=26).
+- Round 1: preprocessing (attacks photo-bucket empties) · targeted re-ask on format-failed fields (attacks silent money/ID wrongs) · e2b-classify cascade (attacks latency). Gates: photo +5pts w/o clean regression; silent-wrongs down w/ ≤4s latency cost; 26/26 classification w/ ≥3s saved.
+- Round 2+: re-aim at whatever class survives — per-field region crops (known form layouts), per-type prompt tightening for the weak 1098/1099-INT types.
+- Wildcard: `gemma4:12b` through the same harness — a third model column for one command.
+- Results: [fill final kept configuration + numbers per round before use]
+
+**The flywheel (writeup future-section, real architecture):** every human correction in the review screen is a labeled example — the product generates its own eval data in normal use. Stats-for-Nerds is that flywheel's surface; nightly self-eval against accumulated corrections makes the recursion permanent after the hackathon.
 
 ## Q&A ammo (beyond docs/DEMO-SCRIPT.md crib)
 
