@@ -70,10 +70,10 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: `python run_eval.py --model gemma4:e4b ...` completes all 26; results.json parses; numbers transcribed nowhere they don't match.
   Evidence: `backend/.venv/bin/python eval/run_eval.py --model gemma4:e4b --labels eval/labels.json --docs eval/testset/` on the FIXED testset (commit `e376cc8` content-crop + W-2 SSN placement, regenerated in `39b1aa8`) → all 26 scored, `doc-type accuracy: 26/26 (100%)`, `field accuracy: 41/94 (43.6%)`, `silent wrong values: 23`, `median latency: 17.23s`. results.json parses (json.load, `docs_scored: 26`). Split: clean 29/47 fields, photo 12/47. Misses are genuine vision errors (e.g. `Coppell Bank` for `Copperline Bank`), not the pre-fix all-empty artifact. Commit `30a66b7`.
 
-- [ ] **T22 — e2b comparison run** (V/agent)
+- [x] **T22 — e2b comparison run** (V/agent)
   DoD: same set through `gemma4:e2b`; comparison table committed (extends the kill test from n=1 to n=26).
   Verify: results file for e2b exists; silent-wrong count for each model recorded.
-  Evidence: _none_
+  Evidence (orchestrator, Sat AM): `eval/results_final_e2b.json` git-tracked (`git ls-files` confirms) and parses — summary `{"model":"gemma4:e2b","docs_scored":29,"doc_type_accuracy":1.0,"field_correct":40,"field_total":106,"field_accuracy":0.3774,"silent_wrong_values":36,"median_latency_s":13.02}`; e4b counterpart `results_final_e4b.json` records `silent_wrong_values:21` — both models' silent-wrong counts recorded. Comparison table committed in docs/WRITEUP.md + docs/OVERNIGHT.md; every transcribed number cross-checked against the json this morning (37.7% = 40/106, 62.3% = 66/106 exact).
 
 - [ ] **T23 — Real phone-photo bucket** (V)
   DoD: ≥2 printed-then-photographed docs added to testset with labels; eval includes them.
