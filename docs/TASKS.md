@@ -99,7 +99,7 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
 - [ ] **T33 — "Stats for Nerds" screen (STRETCH — only after T30-T32 green)** (V/agent)
   DoD: fourth view rendering `GET /stats/timeline?hours=24` per mockup screen 3 (docs/design/tax-intake-mockup.html): headline tiles (docs processed, first-try classification %, correction rate, median latency), docs-per-hour bars, corrections-by-category list, the "Past 24 hours only... Nothing leaves this Mac" line, "the red-pen rate is the number to watch" tagline.
   Verify: with seeded events, all tiles render real numbers; mock mode works without backend.
-  Evidence: _none_
+  Evidence: Frontend half verified in mock mode (`frontend/`, branch `agent/vin-overnight`) — fourth "Nerd stats" view renders `mock/timeline.json` (exact `GET /stats/timeline?hours=24` shape): tiles 31 docs / 94% first-try / 4.2% correction rate / 19.2s median; 24 CSS bars (last 3 ink-blue, "now ←" + axis labels); extraction block 214 / 17 · 7.9% flagged (highlighter) / corrected in red; corrections-by-category 4/2/2/1; both required lines present ("Past 24 hours only — stats reset as they age out. Nothing leaves this Mac." + Caveat "the red-pen rate is the number to watch"). Mock overlays live deltas the way the backend will recompute from events.jsonl: demo-time corrections ticked corrected 9→10 (rate tile 4.2%→4.7%), money 4→5, doc_type reclass 1→2, flagged count correctly did NOT shrink. Zero external requests, console clean. Awaiting backend T14 (`events.jsonl` + real `/stats/timeline`) for full DoD.
 
 ## Phase 4 — Integration + runtime (both; target ~1:00 PM = FREEZE)
 
