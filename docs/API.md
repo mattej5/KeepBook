@@ -1,6 +1,6 @@
 # API Contract
 
-Pinned contract between backend (Andrew) and frontend (Vin). Change only by agreement — both sides build against this.
+Pinned contract between the backend and frontend lanes of Vin's build (both built by Vin + agents). Change only by agreement — both sides build against this.
 
 Base URL: `http://localhost:8100` (dev). All responses JSON.
 

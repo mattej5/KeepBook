@@ -7,8 +7,8 @@ Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51
 ## KeepBook — on-device tax document intake for the firms that can't use cloud AI
 
 **Track:** On-Device AI with Gemma 4
-**Team:** Keepbook (Vin Jones, Andrew [last name])
-**Repo:** https://github.com/higg22-git/KeepBook
+**Team:** Vin Jones (solo, with AI agents)
+**Repo:** https://github.com/mattej5/KeepBook
 **Demo machine:** MacBook M4 Pro, 24GB unified memory. All inference local.
 
 ### The problem

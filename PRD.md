@@ -116,7 +116,7 @@ INFERRED: the two-language constraint keeps context-switching and integration su
 The track disqualifies any project whose inference runs in the cloud, so the runtime choice is existential. Rather than betting on a single runtime, the backend reaches every model through **one adapter** (`backend/model_runtime.py`): a single function `extract(image_b64, prompt) -> str`, with the runtime selected by environment variable. Neither runtime can block the other's work.
 
 **Runtime A — Ollama (VERIFIED, the default).**
-`MODEL_RUNTIME=ollama`. `gemma4:e2b`, `gemma4:e4b`, and `gemma4:12b` are pulled and confirmed working on the demo machine via a real extraction test (§9), hitting `{OLLAMA_HOST}/api/generate`. This path works today. Andrew develops against this runtime (pointing `OLLAMA_HOST` at the model host over Tailscale).
+`MODEL_RUNTIME=ollama`. `gemma4:e2b`, `gemma4:e4b`, and `gemma4:12b` are pulled and confirmed working on the demo machine via a real extraction test (§9), hitting `{OLLAMA_HOST}/api/generate`. This path works today. Development also happens from a secondary dev machine against this runtime (pointing `OLLAMA_HOST` at the model host over Tailscale).
 
 **Runtime B — Courier OS (getcourier.ai) (supported in code, UNVERIFIED in practice).**
 `MODEL_RUNTIME=courier`. An MLX-native, Mac-only local model runtime with an OpenAI-compatible HTTP API — likely built by one of the judges, a real affinity signal. Because the adapter already speaks the OpenAI chat-completions shape, trying Courier is a config change on Vin's Mac, not a code change. Still not verified:
@@ -126,7 +126,7 @@ The track disqualifies any project whose inference runs in the cloud, so the run
 
 **Decision rule (explicit):** the adapter ships both runtimes; the honesty gate is unchanged. The demo and Writeup claim whichever runtime **passed the §9 kill test on the demo Mac**. Courier OS must pass that test with equal or better results before it is named anywhere. If both pass, demo on the better score/latency; Ollama remains the guaranteed fallback. As of this writing the verified runtime is **Ollama**.
 
-Note on the phone: Andrew's iPhone 14 loads `gemma4:e2b` in Google AI Edge Gallery but not `e4b`. That is why the phone never runs inference in this architecture — it is a capture peripheral only. All inference is on the Mac. (VERIFIED.)
+Note on the phone: a teammate's iPhone 14 (during Friday testing) loads `gemma4:e2b` in Google AI Edge Gallery but not `e4b`. That is why the phone never runs inference in this architecture — it is a capture peripheral only. All inference is on the Mac. (VERIFIED.)
 
 ---
 
@@ -223,7 +223,7 @@ Track: **On-Device AI with Gemma 4.** Cloud-based inference disqualifies the pro
 
 Pulled together and ranked, not buried.
 
-1. **Courier OS image support still unverified — but no longer structural.** The dual-runtime adapter (§8) means trying Courier is an env flip on Vin's Mac, and Andrew's Ollama work is never blocked by it. Remaining risk is only the claim: until Courier passes the §9 kill test, every public statement says Ollama.
+1. **Courier OS image support still unverified — but no longer structural.** The dual-runtime adapter (§8) means trying Courier is an env flip on Vin's Mac, and the Ollama work on the secondary dev machine is never blocked by it. Remaining risk is only the claim: until Courier passes the §9 kill test, every public statement says Ollama.
 2. **Real messy-document accuracy is unknown.** The clean-doc kill test is a best case. The eval harness (15-20 real/messy labeled docs) is not built. This is the top build item.
 3. **Phone capture tunnel is unverified end-to-end** (Vercel UI → Cloudflare Tunnel → Mac backend). Explicitly cuttable to folder-drop by tonight's internal cutoff. Not a demo blocker, but currently unproven.
 4. **Design mockup unverified against brief.** The Claude Design render could not be viewed (auth wall). §8 reflects the brief, not a confirmed render. Spot-check before final.

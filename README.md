@@ -58,4 +58,4 @@ Requires [Ollama](https://ollama.com) with `gemma4:e4b` pulled.
 
 ## Team
 
-Keepbook — Vin Jones, Andrew.
+Keepbook — Vin Jones.
