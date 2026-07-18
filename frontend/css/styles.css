@@ -125,7 +125,15 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
   transition: background .15s, border-color .15s;
 }
 .dropzone:hover { border-color: var(--ink-blue); }
-.dropzone.dragover { border-color: var(--ink-blue); background: #2f5fd00d; }
+/* A single gentle ink-ring pulse when a drag enters, settling to a soft steady
+   ring while held. The class is added once on dragenter, so re-firing dragover
+   doesn't restart it; dragleave/drop removes it. */
+.dropzone.dragover { border-color: var(--ink-blue); background: #2f5fd00d; animation: dz-pulse .6s ease forwards; }
+@keyframes dz-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(47, 95, 208, 0); }
+  55%  { box-shadow: 0 0 0 6px rgba(47, 95, 208, .14); }
+  100% { box-shadow: 0 0 0 3px rgba(47, 95, 208, .12); }
+}
 .dz-icon {
   width: 44px; height: 54px; border: 2px solid var(--ink); border-radius: 5px;
   position: relative; background: var(--card);
