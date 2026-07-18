@@ -150,10 +150,10 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: submission confirmation visible; a teammate cross-checks numbers against results.json.
   Evidence: _none_
 
-- [ ] **T52 — Repo final sweep** (agent; by 2:45 PM)
+- [x] **T52 — Repo final sweep** (agent; by 2:45 PM — done ~1:35 PM)
   DoD: README numbers match results.json; no secrets (`grep -ri "api[_-]key\|secret\|token" --exclude-dir=.git` clean or false-positives only); repo confirmed public; fresh-clone run instructions actually work.
   Verify: run the greps + `gh repo view --json isPrivate`; fresh clone in /tmp follows README successfully.
-  Evidence: _none_
+  Evidence: sweep agent + orchestrator, fresh clone in /tmp scratchpad. (1) Secrets grep: every hit a false positive (design-token table headers, CSV tokenizer code, `_MONEY_KEY_TOKENS`, env-var NAMES read with empty-string defaults, docs prose) — no leaked value. (2) `gh repo view mattej5/KeepBook --json isPrivate` → `false`; `higg22-git/KeepBook` resolves to the SAME repo (rename redirect — reconciles T06's old org name). (3) No private files tracked: `git ls-files` grep for `state.json$|.env|events.jsonl|uploads/|raws/` → only state.demo*/state.fallback (expected). (4) Fresh-clone README walk found real rot, fixed in `2d0fd4f`+`fe04fb0`: testset "26 images"→32/29 with bucket split, stale "(main.py in progress)" dropped, venv/Python-3.12/test/eval-requirements instructions added (bare `pytest` fails collection on eval/run_test.py — documented; eval/test_gen_forms.py needs eval/requirements.txt — eval block now installs it). (5) Post-fix, orchestrator personally re-ran in the clone at `fe04fb0`: venv rebuilt exactly per README, `backend/.venv/bin/python -m pytest backend/tests eval/test_scoring.py` → 1 timing flake on cold first run (noted in README) then `88 passed` twice. Server boot verified by agent on :8388 → `/health` ok. (6) README numbers re-checked against `results_final_e4b/e2b` + `results_e4b_region` this session — all match; kill-test 5/6 & 6/6 provenance annotated as the single-doc scripts.
 
 - [ ] **T53 — Demo logistics** (V/agent; by 2:55 PM)
   DoD: model warmed (one inference completed), demo docs staged, backend + frontend running, screen/adapter tested, fallback restore command in a ready terminal.
