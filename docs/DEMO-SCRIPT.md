@@ -14,8 +14,6 @@ Hybrid structure per docs/USER-JOURNEY.md: 30s story cold-open → feature tour 
   - `receipt_01.png` — the UNRECOGNIZED plant
 - [ ] Seed state loaded via `./scripts/demo_state.sh big` — the 8-client seed (reads as real software); it preserves the canonical trio and their exact script states: Ruth Okafor (one confirm from complete), Marcus Whitfield (missing 1099-INT), Chen partnership (missing K-1 + 1098). Fallback restore (`fallback`) unchanged.
 - [ ] Fallback restore command sitting in a ready terminal (T43)
-- [ ] Wi-Fi OFF if T40 passed with it off — say so out loud in the demo
-
 ## Script
 
 **0:00 — Cold open** [checklist dashboard on screen, but don't explain it yet]
@@ -24,7 +22,7 @@ Hybrid structure per docs/USER-JOURNEY.md: 30s story cold-open → feature tour 
 
 **0:20** [drag the demo folder into the drop zone — processing starts NOW and runs behind the rest of the demo]
 
-> "So we built KeepBook. I just dropped her morning inbox in. Everything you're about to see — the model included — is running on this Mac. [if T40 passed:] The Wi-Fi is off."
+> "So we built KeepBook. I just dropped her morning inbox in. Everything you're about to see — the model included — is running on this Mac."
 
 **0:35 — Capture screen** [point at the on-device banner, then the queue filling]
 

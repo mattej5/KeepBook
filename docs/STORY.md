@@ -30,7 +30,7 @@ Everything we caught, prevented, or fixed tonight, recorded so no context window
 
 11. **Teammate loss, absorbed.** Andrew left mid-hackathon and transferred the repo. Solo human + agent fleet absorbed the backend and eval lanes the same night, on a pinned contract that let frontend and backend be built by different agents and integrate on the first try. Ownership swept across every doc in one pass.
 
-12. **The Wi-Fi-off demo proof.** Zero external requests by design — font vendored locally, no CDNs, Vercel and the tunnel amputated from the critical path. The on-device claim isn't a slide; it's "watch me turn off Wi-Fi." (T40 verifies before the demo.)
+12. **The Wi-Fi-off demo proof.** Zero external requests by design — font vendored locally, no CDNs, Vercel and the tunnel amputated from the critical path. The on-device claim isn't a slide; it's zero external requests by construction. (The staged Wi-Fi-off beat was cut on demo day — T40; the no-external-URL grep is the standing evidence.)
 
 13. **The silent-staleness trap that never fired.** Regenerating the test set would have silently kept the OLD broken photo variants — the augmenter skips files that already exist. Caught in the fix brief before it happened; stale variants deleted first. (Same species again: output that looks complete but isn't.)
 

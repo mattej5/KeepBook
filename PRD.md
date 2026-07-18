@@ -108,7 +108,7 @@ Deliberately small stack — **two languages total** (Python + JS/TS) given the 
 | Bin-review + checklist dashboard | Same plain-JS stack | Reviewer corrects extractions; per-client checklist view. Served locally by the backend. |
 | Eval harness | Python | Extends the kill-test scripts (`eval/gen_w2.py`, `eval/run_test.py`). Scores doc-type and per-field accuracy over the labeled test set in `eval/testset/`. |
 
-**Cut from the critical path (deliberate):** the Vercel-hosted UI + Cloudflare Tunnel existed only to serve the phone-capture stretch feature (an HTTPS page can't POST to a plain-HTTP local address). With phone capture cut to stretch (§6), the demo has **zero network dependency** — everything, UI included, serves from the Mac. This is also the demo's on-device proof: the full flow runs with Wi-Fi off (see docs/TASKS.md T40). If phone capture is revived, the tunnel comes back with it.
+**Cut from the critical path (deliberate):** the Vercel-hosted UI + Cloudflare Tunnel existed only to serve the phone-capture stretch feature (an HTTPS page can't POST to a plain-HTTP local address). With phone capture cut to stretch (§6), the demo has **zero network dependency** — everything, UI included, serves from the Mac. This is also the demo's on-device proof: the product has zero network dependency, verified by grep (no non-localhost URL anywhere in frontend/backend/scripts). The staged Wi-Fi-off run was cut on demo day (see docs/TASKS.md T40). If phone capture is revived, the tunnel comes back with it.
 
 INFERRED: the two-language constraint keeps context-switching and integration surface low, which is the right trade for a sub-24-hour build. The static no-build frontend also removes an entire class of deploy failures.
 

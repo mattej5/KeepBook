@@ -35,7 +35,7 @@ No byte of client data leaves the machine. That's not a privacy preference. It's
 - **Model:** Gemma 4 `e4b` (8B params, Q4_K_M, vision), plus `e2b` for the comparison eval
 - **Runtime:** Ollama, verified end-to-end on the demo machine. (The adapter also implements the OpenAI-compatible local-server shape. A second Mac-native runtime was bake-off tested the morning of the demo and did not pass our image-inference verification on 24GB hardware, so per our pre-declared rule it is not named. The negative result lives in the repo, PRD §8.)
 - **Serving:** `localhost` only. The backend (Python/FastAPI) reaches the model through a single adapter (`backend/model_runtime.py`) that speaks both Ollama's native API and any OpenAI-compatible local server, selected by env var. The runtime is swappable without touching product code.
-- **Frontend:** plain HTML/CSS/JS, no build step, served as static files by the same local backend. The demo runs with Wi-Fi off.
+- **Frontend:** plain HTML/CSS/JS, no build step, served as static files by the same local backend. Zero external requests; every call in the product stays on localhost.
 
 ### Why e4b: the kill test
 

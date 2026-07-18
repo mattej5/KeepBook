@@ -116,6 +116,7 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   DoD: folder-drop → classify → bin → review/correct → checklist, all on the M4 with default env (no Tailscale dependency).
   Verify: run the full flow once **with Wi-Fi off** — this is also the demo's on-device proof.
   Evidence: _none_
+  CUT (founder, demo day ~1:20 PM): Wi-Fi-off proof dropped by founder decision; demo runs with network as-is. Writeup and demo script no longer claim Wi-Fi off (writeup line replaced with the grep-verified "zero external requests; every call stays on localhost" — `grep -rnE "https?://" frontend/ backend/*.py scripts/*.sh` minus localhost/xmlns → zero hits). Remaining gap folded into T50: the literal browser drag-drop gesture on the real stack gets its first exercise in dry-run #1.
 
 - [x] **T41 — Courier OS verification (env flip)** (V)
   DoD: install + auth; kill test via `MODEL_RUNTIME=courier`; result recorded in PRD §8 EITHER WAY. Only a pass permits naming Courier in writeup/demo.
