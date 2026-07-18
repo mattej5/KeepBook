@@ -1,0 +1,13 @@
+{
+  "name": "KeepBook",
+  "short_name": "KeepBook",
+  "description": "On-device tax document intake. Nothing leaves this Mac.",
+  "start_url": "/#dashboard",
+  "display": "standalone",
+  "background_color": "#f7f5ee",
+  "theme_color": "#f7f5ee",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
