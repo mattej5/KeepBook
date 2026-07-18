@@ -1467,9 +1467,18 @@
         '<span class="nb-hint">click a row to see what the model saw &amp; said</span></div>' +
         '<div id="runs-rows"><div class="rl-empty">Loading…</div></div></div>';
 
-      $("nerds-body").innerHTML = html;
-      if (animate) countUpTiles($("nerds-body"));
-      renderRuns();
+      // Silent 5s refresh rebuilds this subtree; the runs rows briefly become
+      // "Loading…", the page shortens, and the browser clamps scroll to top —
+      // a reader mid-scroll got yanked. Fix: LOCK the body's height through the
+      // swap so the page never shortens (scroll can't clamp), then release once
+      // the async runs rows have landed and restored the natural height.
+      var nb = $("nerds-body");
+      var sy = animate ? null : window.scrollY;
+      if (sy !== null) nb.style.minHeight = nb.offsetHeight + "px";
+      nb.innerHTML = html;
+      if (sy !== null) window.scrollTo(0, sy);
+      if (animate) countUpTiles(nb);
+      renderRuns(sy);
     }).catch(function (e) {
       $("nerds-body").innerHTML = '<div class="rl-empty">Timeline unavailable (' + esc(e.message) + '). Needs backend /stats/timeline or mock mode.</div>';
     });
@@ -1502,9 +1511,17 @@
   }
 
   // Recent-runs table: newest processed docs, each expandable to its full trace.
-  function renderRuns() {
+  function renderRuns(restoreScrollY) {
     var host = $("runs-rows");
     if (!host || !api.getRuns) { if (host) host.innerHTML = ''; return; }
+    // restoreScrollY: on the silent 5s refresh, once the rows have landed the
+    // natural height is back — release the height lock and re-pin the scroll.
+    function repin() {
+      if (restoreScrollY == null) return;
+      var nb = $("nerds-body");
+      if (nb) nb.style.minHeight = "";
+      if (state.view === "nerds") window.scrollTo(0, restoreScrollY);
+    }
     api.getRuns(20).then(function (r) {
       var runs = (r && r.runs) || [];
       if (!runs.length) { host.innerHTML = '<div class="rl-empty">No runs yet — process a document to see it here.</div>'; return; }
@@ -1564,8 +1581,10 @@
         head.addEventListener("click", function () { setOpen(!row.classList.contains("open")); });
         if (state.expandedRuns[id]) setOpen(true);   // survive the 5s live refresh
       });
+      repin();
     }).catch(function (e) {
       host.innerHTML = '<div class="rl-empty">Runs unavailable (' + esc(e.message) + '). Needs backend /runs or mock mode.</div>';
+      repin();
     });
   }
 

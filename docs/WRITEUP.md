@@ -72,6 +72,7 @@ We track *silent wrong values* (present, well-formatted, incorrect) as a first-c
 - Real-world robustness is characterized by our synthetic-photo and hand-filled buckets [+ real phone photos if added]. Region-crop coordinates are per-form-template (official IRS layouts), so payroll-provider variants (ADP, Gusto) need per-provider templates.
 - Careful mode's remaining 8 silent wrongs are format-valid plausible misreads (wrong-digit TINs, plausible amounts) that no deterministic check catches. Which is exactly why review is mandatory, corrections are one click, and the correction rate sits on a screen. The economics still favor the bookkeeper. Verifying a filled field is ~5× faster than typing it.
 - KeepBook organizes and verifies intake for a human preparer. It does not prepare, advise on, or file returns.
+- Durability is local by design: the entire data footprint is one folder with atomic crash-safe writes, so Time Machine covers it with zero configuration today. The roadmap answer is pointing that folder at the firm's own file server — which keeps the compliance story intact, because a firm's own server is not a third-party processor.
 
 ### What's next
 
