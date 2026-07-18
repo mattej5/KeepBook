@@ -112,7 +112,9 @@ def _patch_adapter(monkeypatch, module, response):
     if not hasattr(runtime, "extract") or not hasattr(module.pipeline, "model_extract"):
         pytest.skip("backend model adapter/pipeline hook is not available yet")
 
-    def fake_extract(_image_b64, prompt):
+    def fake_extract(_image_b64, prompt, **_kwargs):
+        # **_kwargs: the production adapter accepts an optional model= override
+        # (CASCADE strategy); the fake tolerates it without changing behavior.
         return response(prompt) if callable(response) else response
 
     monkeypatch.setattr(runtime, "extract", fake_extract)

@@ -58,10 +58,10 @@ def _post_json(url: str, payload: dict, headers: dict, timeout: int = 300) -> di
 # ---------------------------------------------------------------------------
 # Runtime shapes (docs/API.md)
 # ---------------------------------------------------------------------------
-def _extract_ollama(image_b64: str, prompt: str) -> str:
+def _extract_ollama(image_b64: str, prompt: str, model: str = None) -> str:
     host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
     payload = {
-        "model": _model_name(),
+        "model": model or _model_name(),
         "prompt": prompt,
         "images": [image_b64],
         "stream": False,
@@ -73,7 +73,7 @@ def _extract_ollama(image_b64: str, prompt: str) -> str:
     return out.get("response", "")
 
 
-def _extract_courier(image_b64: str, prompt: str) -> str:
+def _extract_courier(image_b64: str, prompt: str, model: str = None) -> str:
     base = os.environ.get("COURIER_BASE_URL", "").rstrip("/")
     if not base:
         raise RuntimeError(
@@ -84,7 +84,7 @@ def _extract_courier(image_b64: str, prompt: str) -> str:
     if key:
         headers["Authorization"] = f"Bearer {key}"
     payload = {
-        "model": _model_name(),
+        "model": model or _model_name(),
         "temperature": 0,
         "messages": [
             {
@@ -103,12 +103,16 @@ def _extract_courier(image_b64: str, prompt: str) -> str:
     return out["choices"][0]["message"]["content"]
 
 
-def extract(image_b64: str, prompt: str) -> str:
-    """Send one image + prompt to the configured runtime, return raw text."""
+def extract(image_b64: str, prompt: str, model: str = None) -> str:
+    """Send one image + prompt to the configured runtime, return raw text.
+
+    Optional model= overrides MODEL_NAME for this one call (used by the CASCADE
+    strategy to route classify to a smaller model). Defaults to MODEL_NAME.
+    """
     runtime = _runtime()
     if runtime == "courier":
-        return _extract_courier(image_b64, prompt)
-    return _extract_ollama(image_b64, prompt)
+        return _extract_courier(image_b64, prompt, model=model)
+    return _extract_ollama(image_b64, prompt, model=model)
 
 
 if __name__ == "__main__":
