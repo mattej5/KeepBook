@@ -895,6 +895,22 @@
         '<button class="request-link" data-req-client="' + esc(c.id) + '" style="margin-left:12px">Request</button></div>';
     }).join("");
 
+    // Confirmed doc types that match no expected checklist item — otherwise
+    // they'd be filed and exported but invisible on the card. Listed quietly
+    // under the checklist with their received date, only when nonempty.
+    var expectedSet = {};
+    c.expected_docs.forEach(function (t) { expectedSet[t] = true; });
+    var alsoReceived = (c.received_docs || []).filter(function (t) { return !expectedSet[t]; });
+    var alsoHtml = "";
+    if (alsoReceived.length) {
+      alsoHtml = '<div class="also-received"><span class="ar-label">Also received:</span> ' +
+        alsoReceived.map(function (t) {
+          var m = meta[t] || {};
+          return '<span class="ar-item">' + esc(t) +
+            (m.date ? ' <span class="ar-date">(' + esc(m.date) + ')</span>' : '') + '</span>';
+        }).join(", ") + '</div>';
+    }
+
     var badge = complete
       ? '<span class="client-badge-complete">all in ✓</span>'
       : '';
@@ -906,6 +922,7 @@
       '<div class="client-head-right">' + frac + badge + '</div></div>' +
       '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
       rows +
+      alsoHtml +
       '<div class="client-foot"><a class="export-csv-link" href="' + esc(api.exportCsvUrl(c.id)) +
       '" download="' + esc(c.id) + '.csv" title="Confirmed documents as CSV — imports anywhere">Export CSV ↓</a></div>' +
       '</div></div>';

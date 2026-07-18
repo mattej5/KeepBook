@@ -769,7 +769,27 @@ async def export_client_csv(client_id: str):
             doc_id = doc.get("id", "")
             doc_type = doc.get("doc_type", "")
             received_at = doc.get("received_at", "")
-            for key, field in (doc.get("fields") or {}).items():
+            fields = doc.get("fields") or {}
+            if not fields:
+                # Classify-only docs (extract: false, e.g. charitable receipt)
+                # carry no fields; without this they'd export zero rows and
+                # vanish from the sheet. Emit one "document received" row so the
+                # confirmed doc still appears. See docs/API.md "CSV export".
+                rows.append([
+                    client_id,
+                    client_name,
+                    doc_id,
+                    doc_type,
+                    received_at,
+                    "document",
+                    "Document received",
+                    doc_type,
+                    "false",
+                    "",
+                    "false",
+                ])
+                continue
+            for key, field in fields.items():
                 corrected = bool(field.get("corrected"))
                 rows.append([
                     client_id,

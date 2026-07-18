@@ -98,6 +98,13 @@ never exports. A corrected field exports its **corrected** value, with the value
 it replaced in its own `original_value` column, so correction provenance
 survives the hand-off.
 
+**Field-less (classify-only) documents** (`extract: false`, e.g. `charitable
+receipt`) carry no fields, so per-field grain would export them as zero rows and
+drop them from the sheet. Instead each confirmed field-less doc emits exactly
+one row with `field_key = "document"`, `field_label = "Document received"`, and
+`value = doc_type` (`corrected = false`, empty `original_value`,
+`low_confidence = false`). This keeps every confirmed document represented.
+
 Columns (in order):
 
 | column | meaning |
