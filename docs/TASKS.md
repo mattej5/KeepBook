@@ -32,37 +32,37 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
 
 ## Phase 1 — Backend core (owner V/agent; target ~11:00 AM)
 
-- [ ] **T10 — `backend/model_runtime.py` adapter** (V/agent)
+- [x] **T10 — `backend/model_runtime.py` adapter** (V/agent)
   DoD: `extract(image_b64, prompt) -> str` implementing both shapes in docs/API.md, runtime/env-var selected; no other backend file contains a model URL.
   Verify: `MODEL_RUNTIME=ollama python -c "..."` returns non-empty model output for `eval/w2_test.png`; `grep -rn "11434\|api/generate\|chat/completions" backend/ --include="*.py" | grep -v model_runtime.py` returns nothing.
-  Evidence: _none_
+  Evidence: `MODEL_RUNTIME=ollama .venv/bin/python -c "model_runtime.extract(w2_test)"` → JSON `{"doc_type":"W-2","employee_name":"Marcus D. Whitfield","box2_fed_withheld":"9,183.44"}`. Scoped grep `grep -rnE "11434|api/generate|chat/completions|COURIER_BASE_URL" backend/ --include=*.py --exclude-dir=.venv | grep -v model_runtime.py` → CLEAN (only backend source is model_runtime/pipeline/main; venv is gitignored, ignore its lib hits). Commit `be0662d`.
 
-- [ ] **T11 — FastAPI endpoints per docs/API.md** (V/agent)
+- [x] **T11 — FastAPI endpoints per docs/API.md** (V/agent)
   DoD: `/intake`, `/queue`, `/documents`, `/documents/{id}`, `/documents/{id}/image`, `/documents/{id}/confirm`, `/clients`, `/stats` all return contract-shaped JSON; `state.json` persisted on every mutation.
   Verify: curl sequence — POST a testset image to `/intake` → doc reaches `status: extracted` in `/documents` → POST `/confirm` with one changed field → doc `confirmed`, field carries `corrected: true` + `original_value`, client checklist updates; kill and restart server → state intact.
-  Evidence: _none_
+  Evidence: uvicorn :8100 — `POST /intake -F file=@eval/w2_test.png` → `{"queued":["doc_001"]}`; polled `/queue` to `done:1`; `/documents/doc_001` → `status:"extracted"` all 5 W-2 fields (box2 `9,183.44`), `received_at` set; `POST /documents/doc_001/confirm` with box2→`"8,000.00"` → `box2_fed_withheld:{"value":"8,000.00","corrected":true,"original_value":"9,183.44"}`, `status:"confirmed"`, `/clients` → `received_docs:["W-2"]`; `pkill uvicorn` then restart → `/documents/doc_001` still `confirmed` with correction + client intact, `/queue` `done:1`. `/image` → `http=200 image/png`. Commit `be0662d`.
 
-- [ ] **T12 — Classification + extraction prompts** (V/agent)
+- [x] **T12 — Classification + extraction prompts** (V/agent)
   DoD: strict-JSON prompts at temperature 0; unparseable JSON → one retry → `UNRECOGNIZED`; per-type field keys match docs/API.md.
   Verify: `w2_clean_01.png` through the real pipeline → `doc_type: "W-2"` with all five W-2 field keys present.
-  Evidence: _none_
+  Evidence: intake `w2_clean_01.png` → `status:"extracted"`, `doc_type:"W-2"`, field keys `['employee_name','ssn','employer','box1_wages','box2_fed_withheld']` (all five). NOTE: field VALUES came back empty on this image — the known testset generator illegibility bug, NOT a prompt bug (same pipeline on `eval/w2_test.png` returns 6/6 correct incl. box2 `9,183.44`); DoD is type + keys, both correct. Empty values are honestly flagged `low_confidence`. Commit `be0662d`.
 
-- [ ] **T13 — UNRECOGNIZED path** (V/agent)
+- [x] **T13 — UNRECOGNIZED path** (V/agent)
   DoD: non-tax documents are never force-fit; they land in review queue for manual classification, and manual classify → normal confirm flow.
   Verify: `receipt_01.png` through the pipeline → `status: unrecognized`; then POST `/confirm` with a manual `doc_type` + `client_id` succeeds.
-  Evidence: _none_
+  Evidence: intake `receipt_01.png` → `status:"unrecognized"`, `doc_type:"UNRECOGNIZED"`, `fields:{}` (not force-fit); then `POST /confirm {"client_id":"client_whitfield_m","doc_type":"1099-MISC","fields":{"payer":"Acme Corp"}}` → `status:"confirmed"`, `doc_type:"1099-MISC"`, `/clients received_docs` gained `1099-MISC`. Commit `be0662d`.
 
-- [ ] **T14 — Event log + /stats/timeline (STRETCH — only after T10-T13 green)** (V/agent)
+- [x] **T14 — Event log + /stats/timeline (STRETCH — only after T10-T13 green)** (V/agent)
   DoD: backend appends extraction/confirm events to `backend/events.jsonl` per docs/API.md "Event log"; `GET /stats/timeline?hours=24` aggregates buckets + totals incl. corrections_by_category and first_try_type_acc.
   Verify: process 2 docs, correct 1 field, confirm both → timeline totals show 2 docs, correct correction count, category attribution matches the corrected key.
-  Evidence: _none_
+  Evidence: T10-T13 green first. `events.jsonl` carries `extracted`/`unrecognized`/`confirmed` rows in contract shape (incl. `fields_low_confidence` per `acbe402`). Ran 3 docs / 2 confirms / 1 field correction → `GET /stats/timeline?hours=24` totals: `docs_processed:3, fields_extracted:10, fields_low_confidence:5, fields_corrected:2, correction_rate:0.2, first_try_type_acc:0.5, median_latency_s:15.73, corrections_by_category:{"money":1,"names":1,"doc_type":1}` — attribution matches corrected keys (box2_fed_withheld→money, payer→names, receipt→1099-MISC type change→doc_type). Separately: w2_clean_01 (empty fields) → `fields_low_confidence:5` in its extracted event; w2_test (valid) → `0`. Commits `be0662d` + `966ba5f`.
 
 ## Phase 2 — Eval (owner V/agent; target ~12:30 PM)
 
-- [ ] **T20 — `eval/run_eval.py` per docs/EVAL.md** (V/agent)
+- [x] **T20 — `eval/run_eval.py` per docs/EVAL.md** (V/agent)
   DoD: imports the backend adapter + production prompts (not copies); implements the scoring rules (money normalization, casefold strings, silent-wrong-value counter); emits summary + `eval/results.json`.
   Verify: run against any 3 testset images with labels; hand-check one scored field against labels.json.
-  Evidence: _none_
+  Evidence: `run_eval.py --model gemma4:e4b --labels labels.json --docs ./testset/ --images w2_clean_01.png,1099int_clean_01.png,receipt_01.png` → completed, `doc-type accuracy: 3/3 (100.0%)`, `field accuracy: 0/8 (0.0%)`, `silent wrong values: 0`, `median latency: 13.1s`, wrote results.json. `run_eval.py` imports `backend/pipeline.run_pipeline` (not a copy). Hand-check: w2_clean_01 `box1_wages` expected `"101775.13"` (== labels.json) vs predicted `""` → verdict `missing` (empty counts as miss, not silent-wrong — correct). Field 0/8 is the known testset illegibility bug, not a scorer bug. Commit `a7cb7d2`. (Full 26-doc runs = T21/T22, left for orchestrator.)
 
 - [ ] **T21 — Full e4b run over the 26-doc test set** (V/agent)
   DoD: `eval/results.json` committed with doc-type accuracy, field accuracy, silent-wrong count, median latency.
