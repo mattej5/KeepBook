@@ -780,6 +780,87 @@ async def create_client(request: Request):
         return client
 
 
+@app.patch("/clients/{client_id}")
+async def update_client(client_id: str, request: Request):
+    """Edit a client's name and/or expected_docs (CRUD-AUDIT gaps #2/#4).
+
+    Partial update: only the keys present in the body are touched. The client id
+    is NEVER regenerated on rename — documents reference client_id, so a rename
+    that minted a new id would silently orphan every filed document. name (when
+    present) must be non-empty; expected_docs (when present) is a FULL REPLACE of
+    the list, deduped with order preserved. received_docs is left untouched, so a
+    checklist edit never disturbs what the client has actually sent.
+    """
+    body = await request.json()
+    with STATE_LOCK:
+        client = STATE["clients"].get(client_id)
+        if client is None:
+            raise HTTPException(404, f"no client {client_id}")
+
+        if "name" in body:
+            name = body.get("name")
+            if not name or not str(name).strip():
+                raise HTTPException(400, "client name must be non-empty")
+            client["name"] = name
+
+        if "expected_docs" in body:
+            raw = body.get("expected_docs")
+            if not isinstance(raw, list):
+                raise HTTPException(400, "expected_docs must be a list of strings")
+            seen = set()
+            deduped = []
+            for item in raw:
+                s = str(item)
+                if s not in seen:
+                    seen.add(s)
+                    deduped.append(s)
+            client["expected_docs"] = deduped
+
+        _persist_locked()
+        final = json.loads(json.dumps(client))  # snapshot for use outside the lock
+
+    _append_event({"type": "client_updated", "client_id": client_id})
+    return final
+
+
+@app.delete("/clients/{client_id}")
+async def delete_client(client_id: str):
+    """Remove a client (a duplicate/test client) — guarded against orphaning.
+
+    The safe default: refuse with 409 when ANY document still references the
+    client, so a delete can never leave documents pointing at a client that no
+    longer exists. The error body reports the document count and points the
+    reviewer at the remedy (reassign or discard those documents first). An
+    unreferenced client is removed under the same lock/persist/event pattern as
+    the other mutations. 404 on an unknown id.
+    """
+    with STATE_LOCK:
+        client = STATE["clients"].get(client_id)
+        if client is None:
+            raise HTTPException(404, f"no client {client_id}")
+
+        ref_count = sum(
+            1 for d in STATE["documents"].values() if d.get("client_id") == client_id
+        )
+        if ref_count > 0:
+            raise HTTPException(
+                409,
+                detail={
+                    "error": f"client has {ref_count} document"
+                    + ("" if ref_count == 1 else "s")
+                    + " referencing it",
+                    "document_count": ref_count,
+                    "hint": "reassign or discard those documents first",
+                },
+            )
+
+        del STATE["clients"][client_id]
+        _persist_locked()
+
+    _append_event({"type": "client_deleted", "client_id": client_id})
+    return {"deleted": client_id}
+
+
 # Human-readable field labels for the CSV export's field_label column. Mirrors
 # frontend/js/app.js FIELD_LABELS so an exported sheet reads the same as the UI.
 # Unknown keys fall back to the raw snake_case key (see _field_label).

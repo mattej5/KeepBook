@@ -529,6 +529,15 @@ main:has(#view-dashboard.active) { max-width: 1320px; }
 .client-meta .count { font-weight: 600; color: var(--ink); }
 .client-badge-complete { font-family: var(--font-hand); font-size: 22px; color: var(--ink-blue); }
 .client-head-right { display: flex; align-items: center; gap: 10px; flex: none; }
+/* Quiet per-card edit affordance — faint by default, inks in on card hover. */
+.client-edit-btn {
+  border: none; background: none; cursor: pointer; padding: 3px; margin: -3px 2px -3px 0;
+  color: var(--faint); line-height: 0; border-radius: 6px;
+  opacity: 0; transition: color .15s, opacity .15s, background .15s;
+}
+.client-card:hover .client-edit-btn { opacity: 1; }
+.client-edit-btn:hover { color: var(--ink-blue); background: var(--paper-deep); }
+.client-edit-btn:focus-visible { opacity: 1; outline: 2px solid var(--ink-blue); outline-offset: 1px; }
 .progress-frac {
   font-size: 12px; font-weight: 600; color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px;
@@ -617,6 +626,17 @@ main:has(#view-dashboard.active) { max-width: 1320px; }
 .nc-add-input { flex: 1; max-width: 320px; }
 .nc-error { font-size: 12px; font-weight: 600; color: var(--red); margin-top: 12px; min-height: 15px; }
 .nc-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+/* Edit-client footer: delete (or a locked note) on the left, Save/Cancel right. */
+.ec-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.ec-foot-right { display: flex; gap: 10px; }
+.ec-danger {
+  border: 1px solid var(--red); background: none; cursor: pointer;
+  color: var(--red); font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px; transition: background .15s, color .15s;
+}
+.ec-danger:hover { background: var(--red); color: var(--card); }
+.ec-danger:disabled { opacity: .55; cursor: default; }
+.ec-locked-note { font-size: 12px; color: var(--muted); max-width: 320px; }
 
 /* CSV client-list import (T69): a quiet secondary affordance in the form, plus
    the preview-then-commit panel that replaces the form once a file is chosen. */
