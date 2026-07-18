@@ -52,14 +52,31 @@ fi
 
 # --- 2. Compile the two apps -------------------------------------------------
 build_app() {
-  app_name="$1"; command_file="$2"
+  app_name="$1"; command_file="$2"; stay_open="${3:-}"
   app_path="$SCRIPT_DIR/$app_name"
   cmd_path="$SCRIPT_DIR/$command_file"
   echo "Compiling $app_name -> runs $command_file ..."
   rm -rf "$app_path"
-  # do shell script runs the .command via bash with an absolute path.
-  /usr/bin/osacompile -o "$app_path" \
-    -e "do shell script \"/bin/bash \" & quoted form of \"$cmd_path\""
+  if [ "$stay_open" = "stay" ]; then
+    # STAY-OPEN applet: launches the stack, then remains in the Dock with the
+    # running indicator while KeepBook is up — the "this is real software"
+    # affordance. Quitting the icon deliberately does NOT stop the server
+    # (that's stop-keepbook.command's job); it just removes the Dock presence.
+    src="$RUN_DIR/keepbook-applet.applescript"
+    cat > "$src" <<APPLESCRIPT
+on run
+  do shell script "/bin/bash " & quoted form of "$cmd_path"
+end run
+on idle
+  return 3600
+end idle
+APPLESCRIPT
+    /usr/bin/osacompile -s -o "$app_path" "$src"
+  else
+    # run-and-exit wrapper (Stop): do shell script via bash, absolute path.
+    /usr/bin/osacompile -o "$app_path" \
+      -e "do shell script \"/bin/bash \" & quoted form of \"$cmd_path\""
+  fi
 
   if [ -n "$ICNS" ]; then
     res_dir="$app_path/Contents/Resources"
@@ -91,7 +108,7 @@ build_app() {
   fi
 }
 
-build_app "KeepBook.app" "start-keepbook.command"
+build_app "KeepBook.app" "start-keepbook.command" "stay"
 build_app "Stop KeepBook.app" "stop-keepbook.command"
 
 echo
