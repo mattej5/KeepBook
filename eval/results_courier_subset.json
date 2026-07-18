@@ -1,0 +1,244 @@
+{
+  "summary": {
+    "model": "gemma4:e4b",
+    "runtime": "courier",
+    "docs_scored": 5,
+    "doc_type_correct": 5,
+    "doc_type_total": 5,
+    "doc_type_accuracy": 1.0,
+    "field_correct": 11,
+    "field_total": 20,
+    "field_accuracy": 0.55,
+    "classify_only_docs": 0,
+    "silent_wrong_values": 5,
+    "flag_coverage": 0.0,
+    "flag_coverage_silent_wrong": "0/5",
+    "flag_coverage_all_errors": 0.4444,
+    "flag_coverage_all_errors_counts": "4/9",
+    "median_latency_s": 4.03,
+    "hand_ensemble_ran": false,
+    "hand_field_correct": 0,
+    "hand_field_total": 0,
+    "hand_field_accuracy": null,
+    "hand_all_fields_flagged": null,
+    "hand_median_latency_s": null,
+    "ensemble_agreed_fields": 0,
+    "ensemble_disputed_fields": 0,
+    "agreement_precision": null,
+    "agreement_precision_counts": "0/0",
+    "disputed_e4b_correct_rate": null,
+    "disputed_e4b_correct_counts": "0/0"
+  },
+  "per_doc": [
+    {
+      "file": "1098_photo_01.png",
+      "latency_s": 4.03,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Tobias G. Delacroix",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "17725.14",
+          "predicted": "$17,725.14",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Copperline Bank",
+          "predicted": "Coppernlake Bank",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099int_clean_01.png",
+      "latency_s": 3.55,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-INT",
+        "predicted": "1099-INT",
+        "correct": true
+      },
+      "fields": {
+        "box1_interest_income": {
+          "expected": "7706.17",
+          "predicted": "7,706.17",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Cascade Federal Bank",
+          "predicted": "Cascade Federal Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Bianca F. Okafor",
+          "predicted": "Bianca F. Okafor",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "k1_clean_01.png",
+      "latency_s": 3.51,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "K-1",
+        "predicted": "K-1",
+        "correct": true
+      },
+      "fields": {
+        "ordinary_income": {
+          "expected": "114563.75",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partner_name": {
+          "expected": "Rashid P. Bergstrom",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_ein": {
+          "expected": "73-8796124",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_name": {
+          "expected": "Blue Ridge Analytics Inc.",
+          "predicted": "Partner's Share of Income, Deductions, Credits, etc.",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_clean_01.png",
+      "latency_s": 4.44,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "101775.13",
+          "predicted": "101,775.13",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "10410.79",
+          "predicted": "10,410.79",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Rashid B. Bergstrom",
+          "predicted": "Blue Ridge Analytics LLP",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLP",
+          "predicted": "OMB No. 1545-0029",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "432-47-9397",
+          "predicted": "432-47-9397",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_photo_01.png",
+      "latency_s": 4.66,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "101775.13",
+          "predicted": "101,775.13",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "10410.79",
+          "predicted": "10,410.79",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Rashid B. Bergstrom",
+          "predicted": "Rashad B. Bergstrom",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLP",
+          "predicted": "Blue Ridge Analytics LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "432-47-9397",
+          "predicted": "432-47-9397",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    }
+  ]
+}

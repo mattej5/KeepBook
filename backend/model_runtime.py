@@ -60,10 +60,21 @@ def _post_json(url: str, payload: dict, headers: dict, timeout: int = 60) -> dic
 # ---------------------------------------------------------------------------
 def _extract_ollama(image_b64: str, prompt: str, model: str = None) -> str:
     host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    # OLLAMA_PANSCAN=1 (default OFF — this path is the verified reference):
+    # same multi-view packaging as the Courier path, for the matched-technique
+    # bake-off arm. Fairness requires the identical crops + prompt hint.
+    if os.environ.get("OLLAMA_PANSCAN", "0") == "1":
+        images = _panscan_views(image_b64)
+        prompt = (
+            prompt
+            + " You may receive multiple views of the SAME document: full page first, then zoomed crops."
+        )
+    else:
+        images = [image_b64]
     payload = {
         "model": model or _model_name(),
         "prompt": prompt,
-        "images": [image_b64],
+        "images": images,
         "stream": False,
         "options": {"temperature": 0},
     }
@@ -71,6 +82,43 @@ def _extract_ollama(image_b64: str, prompt: str, model: str = None) -> str:
         f"{host}/api/generate", payload, {"Content-Type": "application/json"}
     )
     return out.get("response", "")
+
+
+def _panscan_views(image_b64: str) -> list:
+    """Courier-only image packaging: full page + two half crops along the long
+    axis (50px overlap). Courier's Gemma 4 processor downscales every image to
+    one ~800px/280-token tile, which blurs dense tax forms; sending crops gives
+    each region its own token budget (same idea as transformers' Gemma 3
+    pan-and-scan). Verified: takes e2b from 3 wrong fields to 6/6 on w2_clean.
+    Disable with COURIER_PANSCAN=0 for A/B runs.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    im = Image.open(io.BytesIO(base64.b64decode(image_b64))).convert("RGB")
+    w, h = im.size
+    o = 50
+    if min(w, h) > 1400:
+        # both dimensions dense (e.g. full-page K-1): 2x2 grid so each crop
+        # lands near the processor's native tile size
+        crops = [
+            im.crop((0, 0, w // 2 + o, h // 2 + o)),
+            im.crop((w // 2 - o, 0, w, h // 2 + o)),
+            im.crop((0, h // 2 - o, w // 2 + o, h)),
+            im.crop((w // 2 - o, h // 2 - o, w, h)),
+        ]
+    elif w >= h:
+        crops = [im.crop((0, 0, w // 2 + o, h)), im.crop((w // 2 - o, 0, w, h))]
+    else:
+        crops = [im.crop((0, 0, w, h // 2 + o)), im.crop((0, h // 2 - o, w, h))]
+    views = [image_b64]
+    for c in crops:
+        buf = io.BytesIO()
+        c.save(buf, "PNG")
+        views.append(base64.b64encode(buf.getvalue()).decode())
+    return views
 
 
 def _extract_courier(image_b64: str, prompt: str, model: str = None) -> str:
@@ -83,24 +131,38 @@ def _extract_courier(image_b64: str, prompt: str, model: str = None) -> str:
     headers = {"Content-Type": "application/json"}
     if key:
         headers["Authorization"] = f"Bearer {key}"
+    if os.environ.get("COURIER_PANSCAN", "1") != "0":
+        views = _panscan_views(image_b64)
+        prompt = (
+            prompt
+            + " You may receive multiple views of the SAME document: full page first, then zoomed crops."
+        )
+    else:
+        views = [image_b64]
+    content = [{"type": "text", "text": prompt}] + [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64," + v}}
+        for v in views
+    ]
     payload = {
         "model": model or _model_name(),
         "temperature": 0,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": "data:image/png;base64," + image_b64},
-                    },
-                ],
-            }
-        ],
+        "messages": [{"role": "user", "content": content}],
     }
-    out = _post_json(f"{base}/chat/completions", payload, headers)
-    return out["choices"][0]["message"]["content"]
+    # Courier evicts/reloads models under memory pressure; a call that lands
+    # mid-swap gets a transient 500 or times out while the model pages in.
+    # Retry a few times so one flake doesn't kill a 29-doc eval run.
+    import time
+    import urllib.error
+
+    last_err = None
+    for attempt in range(4):
+        try:
+            out = _post_json(f"{base}/chat/completions", payload, headers)
+            return out["choices"][0]["message"]["content"]
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+            last_err = e
+            time.sleep(12)
+    raise last_err
 
 
 def extract(image_b64: str, prompt: str, model: str = None) -> str:
