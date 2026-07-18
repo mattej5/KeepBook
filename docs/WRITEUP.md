@@ -1,10 +1,10 @@
-# Kaggle Writeup Draft — KeepBook
+# Kaggle Writeup Draft: KeepBook
 
-Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51). Square-bracket slots get filled from `eval/results.json` + final decisions — a teammate cross-checks every number against the file before submit. Do not submit with brackets remaining.
+Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51). Square-bracket slots get filled from `eval/results.json` and final decisions, and a teammate cross-checks every number against the file before submit. Do not submit with brackets remaining.
 
 ---
 
-## KeepBook — on-device tax document intake for the firms that can't use cloud AI
+## KeepBook: on-device tax document intake for the firms that can't use cloud AI
 
 **Subtitle (Kaggle field):** Gemma 4 reads the documents, a human confirms every field, and no byte of a client's tax life ever leaves the laptop.
 
@@ -15,42 +15,42 @@ Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51
 
 ### The problem
 
-Every filing season, small CPA firms and solo bookkeepers drown in intake: dozens of clients, each owing a shifting set of documents — W-2s, 1099s, K-1s, mortgage statements — arriving as email attachments, phone photos, and paper. The work is pure repetitive classification, and it has no safe way to be automated: a firm handling a stranger's SSN and wage history generally needs a signed data processing agreement with any processor touching that data. No such agreement exists for "the chat tab someone had open at 9 PM." So the numbers get retyped by hand — or client identities quietly leak into unvetted cloud tools.
+Every filing season, small CPA firms and solo bookkeepers drown in intake. Dozens of clients, each owing a shifting set of documents (W-2s, 1099s, K-1s, mortgage statements), arriving as email attachments, phone photos, and paper. The work is pure repetitive classification, and there has been no safe way to automate it. A firm handling a stranger's SSN and wage history generally needs a signed data processing agreement with any processor touching that data. No such agreement exists for "the chat tab someone had open at 9 PM." So the numbers get retyped by hand, or client identities quietly leak into unvetted cloud tools.
 
 ### What we built
 
 Drop a folder of scanned or photographed tax documents into KeepBook. Gemma 4, running entirely on the laptop:
 
-1. **Classifies** each document (W-2, 1099-NEC/INT/MISC, K-1, 1098 — anything else lands in *Unrecognized*, never force-fit),
+1. **Classifies** each document (W-2, 1099-NEC/INT/MISC, K-1, 1098; anything else lands in *Unrecognized*, never force-fit),
 2. **Extracts** the key fields (names, SSN, employer, dollar amounts),
 3. **Bins** documents per client, and
-4. maintains the hero feature: a **per-client missing-document checklist** that fills itself in as documents are confirmed — the live answer to "what is this client still missing?"
+4. maintains the hero feature: a **per-client missing-document checklist** that fills itself in as documents are confirmed. It answers "what is this client still missing?" at a glance.
 
-Nothing is trusted without review: every extraction passes a human who confirms or corrects it (wrong value struck in red, correction in ink blue, both preserved). Corrections are counted, so the **correction rate** becomes a live accuracy metric measured on the user's real documents.
+Nothing is trusted without review. Every extraction passes a human who confirms or corrects it (wrong value struck in red, correction in ink blue, both preserved). Corrections are counted, so the **correction rate** becomes a live accuracy metric measured on the user's real documents.
 
-No byte of client data leaves the machine. That's not a privacy preference — it's the reason this product can exist at all. Local inference doesn't make the tool compliant; it removes the third-party processor entirely. The economics compound the argument: intake is seasonal and bursty (hundreds of vision calls per firm per February week), so a per-token cloud bill is exactly wrong-shaped for this workload — on-device inference makes the marginal document free.
+No byte of client data leaves the machine. That's not a privacy preference. It's the reason this product can exist at all. Local inference doesn't make the tool compliant, it removes the third-party processor entirely. The economics point the same direction. Intake is seasonal and bursty (hundreds of vision calls per firm per February week), so a per-token cloud bill is exactly wrong-shaped for this workload. On-device, the marginal document is free.
 
 ### Model stack
 
 - **Model:** Gemma 4 `e4b` (8B params, Q4_K_M, vision), plus `e2b` for the comparison eval
-- **Runtime:** Ollama, verified end-to-end on the demo machine. (The adapter also implements the OpenAI-compatible local-server shape; a second Mac-native runtime was bake-off tested the morning of the demo and did not pass our image-inference verification on 24GB hardware, so per our pre-declared rule it is not named — the negative result lives in the repo, PRD §8.)
-- **Serving:** `localhost` only. The backend (Python/FastAPI) reaches the model through a single adapter (`backend/model_runtime.py`) that speaks both Ollama's native API and any OpenAI-compatible local server, selected by env var — the runtime is swappable without touching product code.
+- **Runtime:** Ollama, verified end-to-end on the demo machine. (The adapter also implements the OpenAI-compatible local-server shape. A second Mac-native runtime was bake-off tested the morning of the demo and did not pass our image-inference verification on 24GB hardware, so per our pre-declared rule it is not named. The negative result lives in the repo, PRD §8.)
+- **Serving:** `localhost` only. The backend (Python/FastAPI) reaches the model through a single adapter (`backend/model_runtime.py`) that speaks both Ollama's native API and any OpenAI-compatible local server, selected by env var. The runtime is swappable without touching product code.
 - **Frontend:** plain HTML/CSS/JS, no build step, served as static files by the same local backend. The demo runs with Wi-Fi off.
 
-### Why e4b — the kill test
+### Why e4b: the kill test
 
 We tested the failure mode that matters most for a tax product before building around it. The same synthetic W-2 went to Gemma 4's two smallest on-device sizes with identical prompts (temperature 0, strict JSON):
 
 | Model | Fields correct | Failure mode | Latency (M4 Pro) |
 |---|---|---|---|
-| `gemma4:e2b` | 5/6 | **Silently returned a wrong dollar amount** for federal withholding — clean, confident JSON, indistinguishable from a right answer | ~10-15s/doc |
+| `gemma4:e2b` | 5/6 | **Silently returned a wrong dollar amount** for federal withholding. Clean, confident JSON, indistinguishable from a right answer | ~10-15s/doc |
 | `gemma4:e4b` | 6/6 | none | ~18-21s/doc |
 
-Reproduced across 3 independent runs. A confidently wrong money value is precisely the error a busy reviewer misses — this single result drove both core design decisions: ship the larger model despite 2× latency, and make human review mandatory rather than optional.
+Reproduced across 3 independent runs. A confidently wrong money value is precisely the error a busy reviewer misses. That single result drove both core design decisions: ship the larger model despite 2× latency, and make human review mandatory rather than optional.
 
 ### Evaluation
 
-We built a labeled eval set of **29 documents**: 12 clean renders generated by overlaying synthetic data on official blank IRS form PDFs (labels emitted in the same code path as the images, so ground truth can't drift), 12 phone-photo degradations (perspective, shadow, blur, sensor noise, desk framing), 2 junk documents that must land in Unrecognized, and **3 genuinely hand-filled forms** (written with a stylus, values pre-committed on a fill sheet before pen touched screen) [+ real phone photos if T23 done]. All data synthetic — no real PII anywhere in the repo.
+We built a labeled eval set of **29 documents**: 12 clean renders generated by overlaying synthetic data on official blank IRS form PDFs (labels emitted in the same code path as the images, so ground truth can't drift), 12 phone-photo degradations (perspective, shadow, blur, sensor noise, desk framing), 2 junk documents that must land in Unrecognized, and **3 genuinely hand-filled forms** (written with a stylus, values pre-committed on a fill sheet before pen touched screen) [+ real phone photos if T23 done]. All data synthetic. No real PII anywhere in the repo.
 
 Results (`eval/results_final_*.json`, reproducible via `eval/run_eval.py`):
 
@@ -61,20 +61,20 @@ Results (`eval/results_final_*.json`, reproducible via `eval/run_eval.py`):
 | Silent wrong values | **21** | **8** | 36 |
 | Median latency | 17.7s | 28.2s | 13.0s |
 
-We track *silent wrong values* — present, well-formatted, incorrect — as a first-class metric, because that's the failure class that hurts users: e2b produces nearly double e4b's silent wrongs at half the accuracy, which is the original kill test scaled to n=29. We also tested `gemma4:12b`: its per-document vision latency exceeds our 60-second serving envelope on 24GB hardware — so e4b beats both neighbors on the axes that matter.
+We track *silent wrong values* (present, well-formatted, incorrect) as a first-class metric because that's the failure class that actually hurts users. e2b produces nearly double e4b's silent wrongs at half the accuracy. That's the original kill test scaled to n=29. We also tested `gemma4:12b`. Its per-document vision latency blows past our 60-second serving envelope on 24GB hardware. So e4b beats both neighbors on the axes that matter.
 
-**The eval drove the engineering, recursively.** Raw baseline was 43.6%. A conditional image-preprocessing pass (crop/deskew/illumination, byte-identical pass-through for clean scans — proven by hash) lifted the phone-photo bucket from 26% to 64% and shipped through a pre-declared gate. A region-crop extraction pass (per-field crops from known form layouts) reaches 92.5% with silent-wrongs cut to 8, but costs +10.5s/doc — it failed our interactive-latency gate, so it ships as an explicit "careful mode" (`REGION_PASS=1`) for batch use rather than a default. Two interventions were built, measured, and **rejected** by the same gates (blind re-asking converted honest misses into well-formatted wrong answers; small-model cascade loses to model-swap costs) — the negative results are in the repo alongside the wins.
+**The eval drove the engineering, recursively.** Raw baseline was 43.6%. A conditional image-preprocessing pass (crop/deskew/illumination, byte-identical pass-through for clean scans, proven by hash) lifted the phone-photo bucket from 26% to 64% and shipped through a pre-declared gate. A region-crop extraction pass (per-field crops from known form layouts) reaches 92.5% with silent-wrongs cut to 8, but costs +10.5s/doc. It failed our interactive-latency gate, so it ships as an explicit "careful mode" (`REGION_PASS=1`) for batch use rather than a default. Two interventions were built, measured, and **rejected** by the same gates. Blind re-asking converted honest misses into well-formatted wrong answers, and the small-model cascade loses to model-swap costs. The negative results are in the repo alongside the wins.
 
-**Handwriting, honestly:** on the hand-filled forms e4b reads 58% of fields, and its misses look like a careless human's — including reading a flat-topped handwritten 3 as a 5 in an SSN, the exact confusion our curator predicted when importing the sample. Handwritten documents are therefore *always* flagged for full review. A dual-model cross-check (e2b + e4b both read; agreement kept, disagreement marked disputed) shows agreed fields are 3× more trustworthy than disputed ones (75% vs 25%, preliminary n=12) — the human gate stays regardless, but the flags get smarter.
+**Handwriting, honestly:** on the hand-filled forms e4b reads 58% of fields, and its misses look like a careless human's. It read a flat-topped handwritten 3 as a 5 in an SSN, the exact confusion our curator predicted when importing the sample. Handwritten documents are therefore *always* flagged for full review. A dual-model cross-check (e2b + e4b both read; agreement kept, disagreement marked disputed) shows agreed fields are 3× more trustworthy than disputed ones (75% vs 25%, preliminary n=12). The human gate stays regardless. The flags just get smarter.
 
 ### Honest limitations
 
-- Real-world robustness is characterized by our synthetic-photo and hand-filled buckets [+ real phone photos if added]; region-crop coordinates are per-form-template (official IRS layouts), so payroll-provider variants (ADP, Gusto) need per-provider templates.
-- Careful mode's remaining 8 silent wrongs are format-valid plausible misreads (wrong-digit TINs, plausible amounts) that no deterministic check catches — which is exactly why review is mandatory, corrections are one click, and the correction rate is on a screen. The economics still favor the bookkeeper: verifying a filled field is ~5× faster than typing it.
+- Real-world robustness is characterized by our synthetic-photo and hand-filled buckets [+ real phone photos if added]. Region-crop coordinates are per-form-template (official IRS layouts), so payroll-provider variants (ADP, Gusto) need per-provider templates.
+- Careful mode's remaining 8 silent wrongs are format-valid plausible misreads (wrong-digit TINs, plausible amounts) that no deterministic check catches. Which is exactly why review is mandatory, corrections are one click, and the correction rate sits on a screen. The economics still favor the bookkeeper. Verifying a filled field is ~5× faster than typing it.
 - KeepBook organizes and verifies intake for a human preparer. It does not prepare, advise on, or file returns.
 
 ### What's next
 
-Every human correction is a labeled example — the product generates its own eval data in normal use, and the Stats-for-Nerds screen (rolling-24h correction rate, "the red-pen rate is the number to watch") is that flywheel's surface. Then: duplicate-document detection, auto-drafted "still waiting on" client nudges from the checklist, per-provider form templates, and the extended 1099/1098 family.
+Every human correction is a labeled example. The product generates its own eval data in normal use, and the Stats-for-Nerds screen (rolling-24h correction rate, "the red-pen rate is the number to watch") is that flywheel's surface. Then: duplicate-document detection, auto-drafted "still waiting on" client nudges from the checklist, per-provider form templates, and the extended 1099/1098 family.
 
-Per-client CSV export ships today: one row per confirmed field, with correction provenance (the corrected value alongside the original it replaced) preserved in the sheet. It integrates with anything that imports CSV today; the named API roadmap is Karbon and Canopy (practice-management tools with public APIs where per-client checklist data maps naturally) plus QuickBooks Online's Attachable API for filing source documents. Tax-prep engines (UltraTax, Lacerte, Drake) are closed to third parties — those stay CSV/manual, honestly.
+Per-client CSV export ships today: one row per confirmed field, with correction provenance (the corrected value alongside the original it replaced) preserved in the sheet. It integrates with anything that imports CSV today. The named API roadmap is Karbon and Canopy (practice-management tools with public APIs where per-client checklist data maps naturally) plus QuickBooks Online's Attachable API for filing source documents. Tax-prep engines (UltraTax, Lacerte, Drake) are closed to third parties, so those stay CSV/manual for now.
