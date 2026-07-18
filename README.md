@@ -6,7 +6,7 @@ Drop a folder of scanned tax documents (or snap them with a phone). Gemma 4 runn
 
 **Why local:** a firm handling client tax data can't legally or safely paste it into a cloud AI tool. Local inference removes the third-party processor entirely.
 
-See [PRD.md](PRD.md) for the full product spec, architecture, and evidence.
+See [PRD.md](PRD.md) for the full product spec, architecture, and evidence. **Working from this repo? Start at [docs/TASKS.md](docs/TASKS.md)** — the live task board with definitions of done; check tasks off only per its rules.
 
 ## Stack
 
