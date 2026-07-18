@@ -54,6 +54,9 @@
           body: JSON.stringify(payload)
         });
       },
+      deleteDocument: function (id) {
+        return j("/documents/" + id, { method: "DELETE" });
+      },
       getTimeline: function (hours) { return j("/stats/timeline?hours=" + (hours || 24)); }
     };
   })();
@@ -271,6 +274,42 @@
           if (c && c.received_docs.indexOf(d.doc_type) < 0) c.received_docs.push(d.doc_type);
           persist();
           return clone(d);
+        });
+      },
+
+      // Delete a document (an erroneous ingest). Mirrors the backend contract:
+      // remove the doc, then un-check the client's checklist item ONLY if no
+      // other confirmed doc of that type remains for the client (count-aware).
+      deleteDocument: function (id) {
+        return ready().then(function () {
+          var idx = -1;
+          for (var i = 0; i < state.documents.length; i++) {
+            if (state.documents[i].id === id) { idx = i; break; }
+          }
+          if (idx < 0) {
+            // Not yet materialized — drop any pending upload with this id.
+            state.uploads = state.uploads.filter(function (u) { return u.id !== id; });
+            persist();
+            return { deleted: id };
+          }
+          var doc = state.documents[idx];
+          var wasConfirmed = doc.status === "confirmed";
+          var clientId = doc.client_id;
+          var docType = doc.doc_type;
+          state.documents.splice(idx, 1);
+          if (wasConfirmed && clientId && docType && docType !== "UNRECOGNIZED") {
+            var c = state.clients.filter(function (x) { return x.id === clientId; })[0];
+            if (c && c.received_docs.indexOf(docType) >= 0) {
+              var stillHave = state.documents.some(function (d) {
+                return d.client_id === clientId && d.doc_type === docType && d.status === "confirmed";
+              });
+              if (!stillHave) {
+                c.received_docs = c.received_docs.filter(function (t) { return t !== docType; });
+              }
+            }
+          }
+          persist();
+          return { deleted: id };
         });
       },
 

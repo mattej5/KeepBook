@@ -586,6 +586,65 @@ async def confirm_document(doc_id: str, request: Request):
     return final
 
 
+@app.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str):
+    """Remove a document (an erroneous ingest) from state.
+
+    Count-aware checklist un-check: a confirmed doc_type is only pulled from the
+    client's received_docs when NO other confirmed doc of that type remains for
+    the client. Persists under the same lock + atomic _persist_locked pattern as
+    /confirm; logs a "deleted" event; best-effort deletes the uploaded image and
+    the raws/<id>.json trace (never fails the request over IO).
+    """
+    with STATE_LOCK:
+        doc = STATE["documents"].get(doc_id)
+        if doc is None:
+            raise HTTPException(404, f"no document {doc_id}")
+
+        was_confirmed = doc.get("status") == "confirmed"
+        client_id = doc.get("client_id")
+        doc_type = doc.get("doc_type")
+        image_abs = _abs_image_path(doc)
+
+        del STATE["documents"][doc_id]
+        if doc_id in QUEUE:
+            QUEUE.remove(doc_id)
+
+        # Un-check the client's checklist item only if this was the last confirmed
+        # document of its type for that client (count-aware).
+        if (
+            was_confirmed
+            and client_id
+            and doc_type
+            and doc_type != pipeline.UNRECOGNIZED
+        ):
+            client = STATE["clients"].get(client_id)
+            if client is not None and doc_type in client.get("received_docs", []):
+                still_have = any(
+                    d.get("client_id") == client_id
+                    and d.get("doc_type") == doc_type
+                    and d.get("status") == "confirmed"
+                    for d in STATE["documents"].values()
+                )
+                if not still_have:
+                    client["received_docs"] = [
+                        t for t in client["received_docs"] if t != doc_type
+                    ]
+
+        _persist_locked()
+
+    # Best-effort cleanup of on-disk artifacts — never fail the request over IO.
+    for path in (image_abs, os.path.join(BASE_DIR, "raws", f"{doc_id}.json")):
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    _append_event({"type": "deleted", "doc_id": doc_id, "doc_type": doc_type})
+    return {"deleted": doc_id}
+
+
 # ---------------------------- Clients --------------------------------------
 @app.get("/clients")
 async def get_clients():

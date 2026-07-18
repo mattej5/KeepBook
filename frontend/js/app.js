@@ -379,11 +379,16 @@
       }
       right += '</div>';
 
+      // Quiet discard affordance — remove an erroneous ingest. Confirmation
+      // dialog names the doc type + client before anything is deleted.
+      right += '<div class="detail-discard"><button class="link-discard" id="discard-btn">Discard this document</button></div>';
+
       el.className = "detail";
       el.innerHTML = imgHtml + '<div class="fields">' + right + '</div>';
 
       var cb = $("confirm-btn"); if (cb) cb.onclick = function () { doConfirm(doc); };
       var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
+      var db = $("discard-btn"); if (db) db.onclick = function () { doDelete(doc); };
       // lazy-load the model trace the first time the disclosure is opened
       var det = el.querySelector(".trace-disclosure");
       if (det) det.addEventListener("toggle", function () {
@@ -464,6 +469,24 @@
         });
       });
     }).catch(function (e) { toast("Confirm failed: " + e.message); });
+  }
+
+  function doDelete(doc) {
+    var typeLabel = doc.status === "unrecognized" ? "this unrecognized document"
+      : doc.status === "error" ? "this unreadable document"
+      : (doc.doc_type ? "this " + doc.doc_type : "this document");
+    var who = clientName(doc.client_id) || "no client yet";
+    if (!window.confirm(
+      "Discard " + typeLabel + " (" + who + ")?\n\n" +
+      "It will be removed and its checklist item unchecked. This can't be undone."
+    )) return;
+    api.deleteDocument(doc.id).then(function () {
+      toast("Document discarded");
+      state.selectedDoc = null;
+      // Refresh the cached client checklist so the Dashboard reflects the removal.
+      api.getClients().then(function (cs) { state.clients = cs; renderReview(); },
+                           function () { renderReview(); });
+    }).catch(function (e) { toast("Discard failed: " + e.message); });
   }
 
   /* ================= CHECKLIST DASHBOARD ================= */
