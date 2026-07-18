@@ -33,7 +33,7 @@ No byte of client data leaves the machine. That's not a privacy preference. It's
 ### Model stack
 
 - **Model:** Gemma 4 `e4b` (8B params, Q4_K_M, vision), plus `e2b` for the comparison eval
-- **Runtime:** Ollama, verified end-to-end on the demo machine. (The adapter also implements the OpenAI-compatible local-server shape. A second Mac-native runtime was bake-off tested the morning of the demo and did not pass our image-inference verification on 24GB hardware, so per our pre-declared rule it is not named. The negative result lives in the repo, PRD §8.)
+- **Runtime:** Ollama, verified end-to-end on the demo machine. (The adapter also implements the OpenAI-compatible local-server shape, which let us bake off a second Mac-native runtime, Courier OS, against Ollama through the same adapter on demo day. Its as-shipped build failed image inference on 24GB hardware in the morning; by early afternoon a quant-matched 4-bit MLX build plus a pan-and-scan adapter passed all three of our pre-declared gates: 91.5% fields at 7.0s median on the full eval. The full record, including the fairness caveat that pan-and-scan ran only on that path, is in PRD §8. The demo ships Ollama.)
 - **Serving:** `localhost` only. The backend (Python/FastAPI) reaches the model through a single adapter (`backend/model_runtime.py`) that speaks both Ollama's native API and any OpenAI-compatible local server, selected by env var. The runtime is swappable without touching product code.
 - **Frontend:** plain HTML/CSS/JS, no build step, served as static files by the same local backend. Zero external requests; every call in the product stays on localhost.
 
@@ -61,7 +61,7 @@ Results (`eval/results_final_*.json`, reproducible via `eval/run_eval.py`):
 | Silent wrong values | **21** | **8** | 36 |
 | Median latency | 17.7s | 28.2s | 13.0s |
 
-We track *silent wrong values* (present, incorrect, and indistinguishable from a right answer at a glance) as a first-class metric because that's the failure class that actually hurts users. e2b produces nearly double e4b's silent wrongs at half the accuracy. That's the original kill test scaled to n=29. We also tested `gemma4:12b`. Its per-document vision latency blows past our 60-second serving envelope on 24GB hardware. So e4b beats both neighbors on the axes that matter.
+We track *silent wrong values* (present, incorrect, and indistinguishable from a right answer at a glance) as a first-class metric because that's the failure class that actually hurts users. e2b produces nearly double e4b's silent wrongs at 60 percent of the accuracy. That's the original kill test scaled to n=29. We also tested `gemma4:12b`. Its per-document vision latency blows past our 60-second serving envelope on 24GB hardware. So e4b beats both neighbors on the axes that matter.
 
 **The eval drove the engineering, recursively.** Raw baseline was 43.6%. A conditional image-preprocessing pass (crop/deskew/illumination, byte-identical pass-through for clean scans, proven by hash) lifted the phone-photo bucket from 26% to 64% and shipped through a pre-declared gate. A region-crop extraction pass (per-field crops from known form layouts) reaches 92.5% with silent-wrongs cut to 8, but costs +10.5s/doc. It failed our interactive-latency gate, so it ships as an explicit "careful mode" (`REGION_PASS=1`) for batch use rather than a default. Two interventions were built, measured, and **rejected** by the same gates. Blind re-asking converted honest misses into well-formatted wrong answers, and the small-model cascade loses to model-swap costs. The negative results are in the repo alongside the wins.
 
@@ -70,7 +70,7 @@ We track *silent wrong values* (present, incorrect, and indistinguishable from a
 ### Honest limitations
 
 - Real-world robustness is characterized by our synthetic-photo and hand-filled buckets. Region-crop coordinates are per-form-template (official IRS layouts), so payroll-provider variants (ADP, Gusto) need per-provider templates.
-- Careful mode's remaining 8 silent wrongs are format-valid plausible misreads (wrong-digit TINs, plausible amounts) that no deterministic check catches. Which is exactly why review is mandatory, corrections are one click, and the correction rate sits on a screen. The economics still favor the bookkeeper. Verifying a filled field is ~5× faster than typing it.
+- Careful mode's remaining 8 silent wrongs are format-valid plausible misreads (wrong-digit TINs, plausible amounts) that no deterministic check catches. Which is exactly why review is mandatory, corrections are one click, and the correction rate sits on a screen. The economics still favor the bookkeeper. Verifying a filled field is much faster than typing it.
 - KeepBook organizes and verifies intake for a human preparer. It does not prepare, advise on, or file returns.
 - Durability is local by design: the entire data footprint is one folder with atomic crash-safe writes, so Time Machine covers it with zero configuration today. The roadmap answer is pointing that folder at the firm's own file server — which keeps the compliance story intact, because a firm's own server is not a third-party processor.
 

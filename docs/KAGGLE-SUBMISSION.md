@@ -54,7 +54,9 @@ The rest of the hard parts were discipline under a one-day clock: holding a pre-
 
 ---
 
-## OPEN ITEM before submit (Vin's call)
+## DECIDED (~1:55 PM): Option A — Courier named, full record. Applied to docs/WRITEUP.md. GATED on the parallel session pushing PRD §8's full-run paragraph + eval/results_courier_*.json + model_runtime.py to origin BEFORE submitting; if the cutoff arrives first, flip the writeup's runtime line to the fallback wording below (kill test + subset only, "full-run record was still being committed at submission time").
+
+## Original open item (resolved above, kept for provenance)
 
 The writeup's runtime line currently says the second runtime "did not pass our image-inference verification... so per our pre-declared rule it is not named." As of ~1:30 PM the parallel session's full 32-doc bake-off PASSED all three pre-declared gates (kill test, 5-doc subset, full run): 32/32 doc-type, 97/106 fields (91.5%), 7 silent wrongs, 7.0s median via a quant-matched MLX 4-bit build + pan-and-scan adapter, vs our shipping 62.3% / 17.7s. Recorded caveat: pan-and-scan ran only on the Courier path (no Ollama+panscan arm), community quant, trimmed memory margins. The stale sentence must change either way. Two drafts:
 
