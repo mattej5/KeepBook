@@ -82,8 +82,46 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
+  // A doc that hasn't been confirmed yet — the Review queue's contents.
+  function needsReview(d) {
+    return d.status === "extracted" || d.status === "unrecognized" || d.status === "error";
+  }
+  // Friendly local wall-clock time, e.g. "8:42 AM".
+  function fmtIntakeTime(iso) {
+    if (!iso) return null;
+    var d = new Date(iso);
+    if (isNaN(d)) return null;
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  // Most recent received_at across the docs (the last intake).
+  function lastIntakeIso(docs) {
+    var best = null, bestT = -Infinity;
+    (docs || []).forEach(function (d) {
+      if (!d.received_at) return;
+      var t = new Date(d.received_at).getTime();
+      if (!isNaN(t) && t > bestT) { bestT = t; best = d.received_at; }
+    });
+    return best;
+  }
+  // Operational one-liner shown where the old privacy copy sat: how many docs
+  // are waiting on the reviewer, and when the last batch came in. Live data.
+  function opSummary(docs) {
+    var awaiting = (docs || []).filter(needsReview).length;
+    var parts = [awaiting + " awaiting review"];
+    var t = fmtIntakeTime(lastIntakeIso(docs));
+    if (t) parts.push("last intake " + t);
+    return parts.join(" · ");
+  }
+  function renderCaptureOp() {
+    var el = $("capture-op"); if (!el) return;
+    api.getDocuments().then(function (docs) {
+      var e = $("capture-op"); if (e) e.textContent = opSummary(docs);
+    }).catch(function () {});
+  }
+
   /* ================= CAPTURE / SUBMIT ================= */
   function renderCapture() {
+    renderCaptureOp();
     var block = $("queue-block");
     if (!state.dropped.length && !state.processing) {
       block.innerHTML = '<div class="section-label">Queued · 0 files</div>' +
@@ -199,6 +237,7 @@
               '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
               '<div class="rl-empty">Sorted into per-client bins. <a href="#" id="to-review">Review them →</a></div>';
             var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
+            renderCaptureOp();
           }
           toast(n + " document" + (n === 1 ? "" : "s") + " ready in Review");
         }
@@ -217,7 +256,8 @@
   /* ================= BIN REVIEW & CORRECTION ================= */
   function renderReview() {
     api.getDocuments().then(function (docs) {
-      var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized" || d.status === "error"; });
+      var needs = docs.filter(needsReview);
+      var opEl = $("review-op"); if (opEl) opEl.textContent = opSummary(docs);
       var listEl = $("review-list");
       if (!needs.length) {
         listEl.innerHTML = '<div class="rl-empty">Nothing to review. All caught up.</div>';
@@ -431,7 +471,7 @@
     Promise.all([api.getClients(), api.getDocuments(), api.getStats()]).then(function (res) {
       var clients = res[0], docs = res[1], stats = res[2];
       state.clients = clients;
-      renderStats(stats);
+      renderStats(stats, fmtIntakeTime(lastIntakeIso(docs)));
 
       var grid = $("client-grid");
       grid.innerHTML = clients.map(function (c) { return clientCardHtml(c, docs); }).join("");
@@ -491,22 +531,24 @@
     var badge = complete
       ? '<span class="client-badge-complete">all in ✓</span>'
       : '';
+    var frac = '<span class="progress-frac tnum' + (complete ? " done" : "") + '">' + haveCount + '/' + total + '</span>';
 
     return '<div class="card client-card"><div class="card-pad">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">' +
-      '<div class="client-name">' + esc(c.name) + '</div>' + badge + '</div>' +
+      '<div class="client-name">' + esc(c.name) + '</div>' +
+      '<div class="client-head-right">' + frac + badge + '</div></div>' +
       '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
       rows + '</div></div>';
   }
 
-  function renderStats(s) {
+  function renderStats(s, lastIntake) {
     var rate = (s.correction_rate * 100).toFixed(1) + "%";
     $("stats-line").innerHTML =
       '<div class="stats-bar">' +
       '<div class="stat"><span class="num tnum">' + s.fields_extracted + '</span><span class="lbl">fields extracted</span></div>' +
       '<div class="stat"><span class="num tnum">' + s.fields_corrected + '</span><span class="lbl">fields corrected</span></div>' +
       '<div class="stat"><span class="num rate tnum">' + rate + '</span><span class="lbl">correction rate</span></div>' +
-      '<span class="stats-note">measured on real documents</span>' +
+      (lastIntake ? '<span class="stats-note">last intake ' + esc(lastIntake) + '</span>' : '') +
       '</div>';
   }
 
@@ -573,7 +615,7 @@
         nbRow("Document type (reclassified)", '<span>' + cats.doc_type + '</span>') +
         '</div></div>';
 
-      html += '<div class="nerd-foot"><span class="privacy-line">Processed on this Mac. Nothing is uploaded.</span>' +
+      html += '<div class="nerd-foot">' +
         '<span class="hand-note" style="font-size:17px">the red-pen rate is the number to watch</span></div>';
 
       $("nerds-body").innerHTML = html;

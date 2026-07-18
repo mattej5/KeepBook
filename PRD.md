@@ -190,6 +190,8 @@ Type: **Caveat** (handwritten) for personality and headlines only; system sans w
 3. **Checklist Dashboard** — the hero screen. A per-client missing-document checklist that visibly "inks itself in" as documents are confirmed. This is the one deliberate animation moment, chosen because it is the clearest visualization of the actual pain point (what is this client still missing), not the flashiest technical moment.
 4. **Stats for Nerds** (STRETCH, added Sat morning) — rolling-24h live eval telemetry: correction rate ("the red-pen rate is the number to watch"), first-try classification accuracy, corrections by field category, docs/hour, median latency. This is PRD §9's "correction rate as live accuracy metric" promoted to a screen. Backend keeps a stringent append-only event log; the UI deliberately shows only the last 24h, and states that nothing leaves the Mac. Built only after the three core screens are green (docs/TASKS.md T14/T33).
 
+**Copy note (2026-07-18, founder direction, T60):** two editorial lines were removed on purpose, not by drift. The privacy caption "Processed on this Mac. Nothing is uploaded." (Capture + Review) and the dashboard stats caption "measured on real documents" no longer earned their pixels. They are replaced by operational status computed from live data: a docs-awaiting-review count (Capture + Review), a friendly last-intake time (Capture + Dashboard stats line), and per-client progress fractions on the Dashboard cards — all derived from `/documents`, `/clients`, and `/stats`, in both live and mock mode. The Nerd Stats sentence "The dashboard shows the last 24 hours. Nothing leaves this Mac." is a distinct, retained statement and was intentionally left in place.
+
 ---
 
 ## 11. Rubric Self-Assessment
