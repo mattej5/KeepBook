@@ -11,8 +11,12 @@
 <body>
   <header class="app-header">
     <div class="brand">
-      <!-- Drop frontend/assets/logo.svg to replace the text wordmark (zero code change).
-           No logo present -> img errors, removes itself, the text wordmark below shows. -->
+      <!-- Two zero-code logo slots:
+           assets/logo-mark.svg  -> square mark shown BESIDE the text wordmark
+           assets/logo.svg       -> full wordmark, REPLACES the text wordmark
+           Missing files error out and remove themselves; text wordmark is the default. -->
+      <img class="brand-mark" src="assets/logo-mark.svg" alt=""
+           onload="this.classList.add('loaded')" onerror="this.remove()">
       <img class="brand-logo" src="assets/logo.svg" alt="KeepBook"
            onload="this.classList.add('loaded')" onerror="this.remove()">
       <div class="wordmark">Keep<span class="dot">Book</span></div>
