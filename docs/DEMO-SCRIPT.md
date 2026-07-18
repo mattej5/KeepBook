@@ -90,6 +90,9 @@ The firm — per-seat, seasonal peak. The buyer is the person liable for the dat
 **"Isn't this just a wrapper around Gemma?"**
 Gemma is the reader. The product is what surrounds it: binning, the per-client checklist, mandatory review with correction provenance (struck value preserved), the Unrecognized path, and an eval harness that measures the whole pipeline. Swap the model next year; the product remains.
 
+**"Why no QuickBooks integration?"** [researched morning-of; every claim verified against current vendor docs]
+QuickBooks is bookkeeping software, not tax-document software — its API has no object for a W-2 or a K-1, so the only thing we could push is a PDF into its generic attachments bucket, which doesn't capture the extracted field values that are the whole point. The tools where our structured data is actually worth money are the tax-prep engines — UltraTax, Lacerte, Drake — and those are closed: no public API, only proprietary partner integrations. So we ship CSV today, which everything ingests, and the API roadmap names the practice-management systems that actually have open APIs: Karbon and Canopy. [Do NOT name TaxDome as an API target — it has no public API, Zapier-only, and Zapier can't even receive a document.]
+
 **"Does it file taxes?"**
 No, and deliberately never claims to. It organizes and verifies intake for a human preparer. Filing is licensed territory — we stay on the safe side of that line (PRD §5).
 
