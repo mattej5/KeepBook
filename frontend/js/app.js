@@ -72,6 +72,10 @@
   // New-client create form: open flag, the in-progress name, and the pruned
   // expected-docs list (seeded from ORGANIZER_TEMPLATE when the form opens).
   var newClientState = { open: false, name: "", docs: [], error: "" };
+  // CSV client-list import (T69). When non-null the new-client card shows a
+  // preview-then-commit panel instead of the single-client form. Shape:
+  // { toCreate:[{name,expected_docs}], dupes, found, blanks, headerSkipped, fileName }.
+  var csvImportState = null;
 
   var $ = function (id) { return document.getElementById(id); };
   function toast(msg) {
@@ -765,6 +769,7 @@
   function openNewClientForm() {
     // Seed the picker from the firm's standard organizer template (a COPY, so
     // pruning this client never mutates the shared template).
+    csvImportState = null;
     newClientState = { open: true, name: "", docs: ORGANIZER_TEMPLATE.slice(), error: "" };
     paintNewClientCard();
     var card = $("new-client-card");
@@ -773,6 +778,7 @@
   }
 
   function closeNewClientForm() {
+    csvImportState = null;
     newClientState = { open: false, name: "", docs: [], error: "" };
     paintNewClientCard();
   }
@@ -820,6 +826,9 @@
       card.innerHTML = "";
       return;
     }
+    // CSV import in progress → the card is a preview-then-commit panel, not the
+    // single-client form. Nothing is created until Import is clicked.
+    if (csvImportState) { paintCsvPreview(card); return; }
     card.hidden = false;
     card.className = "card client-card new-client-form";
     card.innerHTML = '<div class="card-pad">' +
@@ -834,6 +843,8 @@
         'autocomplete="off" placeholder="Add another form…">' +
         '<button class="btn-ghost btn-sm" id="nc-add-btn" type="button">Add</button></div>' +
       '<div class="nc-error" id="nc-error">' + esc(newClientState.error) + '</div>' +
+      '<div class="nc-import-row">or <button class="nc-import-link" id="nc-import-link" type="button">import a client list (CSV)</button>' +
+        '<input type="file" id="nc-csv-input" accept=".csv,text/csv" hidden></div>' +
       '<div class="nc-foot"><button class="btn-ghost btn-sm" id="nc-cancel" type="button">Cancel</button>' +
         '<button class="btn btn-sm" id="nc-create" type="button">Create client</button></div>' +
       '</div>';
@@ -849,6 +860,121 @@
     var addBtn = $("nc-add-btn"); if (addBtn) addBtn.onclick = ncAddDoc;
     var cancel = $("nc-cancel"); if (cancel) cancel.onclick = closeNewClientForm;
     var create = $("nc-create"); if (create) create.onclick = submitNewClient;
+    var importLink = $("nc-import-link");
+    var csvInput = $("nc-csv-input");
+    if (importLink && csvInput) importLink.onclick = function () { csvInput.click(); };
+    if (csvInput) csvInput.onchange = function () {
+      var f = csvInput.files && csvInput.files[0];
+      csvInput.value = "";          // allow re-picking the same file later
+      if (f) onCsvFileChosen(f);
+    };
+  }
+
+  /* ---------- CSV client-list import (T69) ---------- */
+  // Normalization shared by the preview count and the commit loop, so the
+  // "M duplicates will be skipped" line can never disagree with what Import does.
+  function normName(s) { return String(s == null ? "" : s).trim().toLowerCase(); }
+
+  // Turn a parse result into a frozen commit plan: dedupe against existing client
+  // names (case-insensitive) AND within-file repeats, computed ONCE here so the
+  // preview and the sequential create loop operate on the identical list.
+  function computeCsvPlan(parsed) {
+    var seen = {};
+    (state.clients || []).forEach(function (c) { seen[normName(c.name)] = true; });
+    var toCreate = [];
+    var dupes = 0;
+    parsed.clients.forEach(function (c) {
+      var key = normName(c.name);
+      if (seen[key]) { dupes++; return; }
+      seen[key] = true;
+      toCreate.push(c);
+    });
+    return {
+      toCreate: toCreate, dupes: dupes, found: parsed.clients.length,
+      blanks: parsed.skipped_blank, headerSkipped: parsed.header_skipped, fileName: ""
+    };
+  }
+
+  function onCsvFileChosen(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var text = String(reader.result == null ? "" : reader.result);
+      var parsed = window.KeepBookCsv.parseClientCsv(text, ORGANIZER_TEMPLATE.slice());
+      if (!parsed.clients.length) {
+        toast("No client rows found in that CSV");
+        return;   // stay on the form; nothing to preview
+      }
+      csvImportState = computeCsvPlan(parsed);
+      csvImportState.fileName = file.name || "";
+      paintNewClientCard();
+    };
+    reader.onerror = function () { toast("Couldn't read that file"); };
+    reader.readAsText(file);
+  }
+
+  function cancelCsvImport() {
+    csvImportState = null;
+    paintNewClientCard();   // back to the single-client form
+  }
+
+  // Preview panel: honest counts + the first few names that WILL be created.
+  // Import is disabled when everything is a duplicate (nothing new to add).
+  function paintCsvPreview(card) {
+    var p = csvImportState;
+    card.hidden = false;
+    card.className = "card client-card new-client-form";
+    var mk = p.toCreate.length;
+    var shown = p.toCreate.slice(0, 6).map(function (c) { return esc(c.name); });
+    var more = mk - shown.length;
+    var namesLine = mk
+      ? shown.join(", ") + (more > 0 ? " +" + more + " more" : "")
+      : "Every row is already a client — nothing new to import.";
+    var summary = p.found + " client" + (p.found === 1 ? "" : "s") + " found · " +
+      p.dupes + " duplicate" + (p.dupes === 1 ? "" : "s") + " will be skipped · " +
+      p.blanks + " blank row" + (p.blanks === 1 ? "" : "s") + " ignored";
+    card.innerHTML = '<div class="card-pad">' +
+      '<div class="nc-title">Import client list</div>' +
+      (p.fileName ? '<div class="nc-csv-file">' + esc(p.fileName) + '</div>' : '') +
+      '<div class="nc-csv-summary">' + esc(summary) + '</div>' +
+      '<div class="nc-csv-names">' + namesLine + '</div>' +
+      '<div class="nc-error" id="csv-error"></div>' +
+      '<div class="nc-foot"><button class="btn-ghost btn-sm" id="csv-cancel" type="button">Cancel</button>' +
+        '<button class="btn btn-sm" id="csv-import-btn" type="button"' + (mk ? "" : " disabled") + '>' +
+        'Import ' + mk + ' client' + (mk === 1 ? "" : "s") + '</button></div>' +
+      '</div>';
+    var cc = $("csv-cancel"); if (cc) cc.onclick = cancelCsvImport;
+    var ci = $("csv-import-btn"); if (ci) ci.onclick = runCsvImport;
+  }
+
+  // Commit: sequential, awaited api.createClient calls (the backend mints ids —
+  // no parallel spam). Partial-failure honesty: on the first failure, stop, report
+  // how many landed, and re-render so the user sees exactly what exists.
+  function runCsvImport() {
+    var plan = csvImportState;
+    if (!plan || !plan.toCreate.length) return;
+    var btn = $("csv-import-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Importing…"; }
+    var total = plan.toCreate.length;
+    var created = 0;
+    var chain = Promise.resolve();
+    plan.toCreate.forEach(function (c) {
+      chain = chain.then(function () {
+        return api.createClient({ name: c.name, expected_docs: (c.expected_docs || []).slice() })
+          .then(function () { created++; });
+      });
+    });
+    chain.then(function () {
+      csvImportState = null;
+      closeNewClientForm();
+      toast("Imported " + created + " client" + (created === 1 ? "" : "s"));
+      renderDashboard();
+    }).catch(function (e) {
+      csvImportState = null;
+      closeNewClientForm();
+      var msg = e && e.message ? e.message : "error";
+      toast("Imported " + created + " of " + total + " — " + msg);
+      renderDashboard();
+    });
   }
 
   function submitNewClient() {

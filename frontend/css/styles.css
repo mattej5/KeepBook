@@ -562,6 +562,19 @@ main:has(#view-dashboard.active) { max-width: 1320px; }
 .nc-error { font-size: 12px; font-weight: 600; color: var(--red); margin-top: 12px; min-height: 15px; }
 .nc-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 
+/* CSV client-list import (T69): a quiet secondary affordance in the form, plus
+   the preview-then-commit panel that replaces the form once a file is chosen. */
+.nc-import-row { font-size: 12.5px; color: var(--faint); margin-top: 14px; }
+.nc-import-link {
+  border: none; background: none; cursor: pointer; padding: 0;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-blue);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.nc-import-link:hover { color: var(--ink); }
+.nc-csv-file { font-size: 12.5px; color: var(--faint); margin-top: 4px; }
+.nc-csv-summary { font-size: 13px; font-weight: 600; color: var(--ink); margin: 14px 0 6px; }
+.nc-csv-names { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
 /* Review card settle-in — plays once, only on a doc's first appearance (JS gates
    the class via state.knownReviewIds). Base state = settled, so reduced-motion
    simply lands here. */
