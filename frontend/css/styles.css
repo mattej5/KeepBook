@@ -452,16 +452,15 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 .link-discard:hover { color: var(--red); }
 
 /* ---------- Checklist Dashboard ---------- */
-/* Multi-column client grid: cards flow into as many ~400px columns as fit.
-   align-items:start keeps short cards from stretching to their row's tallest. */
-.client-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
-  gap: 18px; align-items: start;
-}
+/* Masonry client grid via CSS columns: cards pack vertically with a constant
+   gap to the card above (founder call — row-aligned tops read awkward with
+   varied checklist heights). Cards flow down each column, never split. */
+.client-grid { columns: 390px; column-gap: 18px; }
+.client-grid > .card { break-inside: avoid; margin-bottom: 18px; }
 /* the dashboard earns a wider canvas than the reading-width views */
 main:has(#view-dashboard.active) { max-width: 1320px; }
-/* the create form reads better across the full row */
-.new-client-form { grid-column: 1 / -1; }
+/* the create form spans awkwardly in column flow — let it be a normal card */
+.new-client-form { column-span: all; }
 /* FAB: the always-available "+ New client", pinned bottom-right over the
    scrollable client grid */
 .fab {

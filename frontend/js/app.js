@@ -1335,6 +1335,9 @@
     // Add Client FAB is static markup — bind once here, not per dashboard render.
     var fab = $("fab-new-client");
     if (fab) fab.onclick = openNewClientForm;
+    // Logo/wordmark click = home (home IS the dashboard).
+    var brand = document.querySelector(".brand");
+    if (brand) { brand.style.cursor = "pointer"; brand.onclick = function () { show("dashboard"); }; }
 
     // preload clients so review/dashboard have names
     api.getClients().then(function (cs) { state.clients = cs; });

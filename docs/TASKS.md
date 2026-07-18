@@ -132,9 +132,9 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: restore command swaps state and dashboard renders instantly.
   Evidence: `backend/state.fallback.json` (adds doc_006 Marcus 1099-INT confirmed + doc_007 Chen K-1 confirmed, plus doc_003 flips to `confirmed`) + `scripts/demo_state.sh` (portable bash 3.2, no assoc arrays — stages images from `eval/` into `backend/uploads/` since `uploads/` is gitignored, copies the chosen state file to `backend/state.json`, then kill+restarts uvicorn on :8100 because `main.py` only loads state at the FastAPI startup event, no hot-reload path). `./scripts/demo_state.sh fallback` against the running server → `GET /clients`: Ruth `received_docs:["1099-INT","1098","W-2"]` (3/3 complete), Marcus `["W-2","1099-INT"]` (2/2 complete), Chen `["K-1"]` (1/2, mostly complete — 1098 still open, matches DoD "mostly complete" not staged as suspiciously perfect). `doc_003` status flips `extracted`→`confirmed`. `doc_006`/`doc_007` images `200 image/png`. Then `./scripts/demo_state.sh seed` run again → dashboard flips back to the T42 gaps (verified above) and left loaded as the final state. Commit `4712c53`.
 
-- [x] **T44 — FREEZE at 1:00 PM** (all)
+- [ ] **T44 — FREEZE at 1:00 PM** (all)
   DoD: no feature code after 1:00 PM; only demo prep, writeup, and fixes for demo-blocking bugs.
-  Evidence (orchestrator, 1:00 PM): tree frozen at this commit. Final pre-freeze state: suite 69 green, zero console errors, big demo seed loaded, /health serving current sha, all lanes merged (T60-T65, T69, polish pass, QA fixes, observability, sidebar, animations, brand/PWA/applet), every check-off evidence-gated. Last feature changes in under the wire: review-header copy ("AI can make mistakes…"), strikethrough on received checklist items, stay-open Dock applet. After this commit: demo prep, writeup, and demo-blocking fixes only.
+  CORRECTION (orchestrator ~11:40): previous check-off was premature — orchestrator's clock estimate ran ~80 min fast; founder corrected the time to 11:35. Box re-opened; the "frozen state" note from that check-off accurately describes the tree as of commit `804e729` (69 green, all lanes merged, evidence-gated) but the freeze itself has NOT occurred. Freeze happens at the real 1:00 PM.
 
 ## Phase 5 — Demo + submission (hard deadlines)
 
