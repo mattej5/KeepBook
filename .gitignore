@@ -12,3 +12,5 @@ backend/state.json
 backend/state.json.tmp
 backend/events.jsonl
 backend/raws/
+.claude/
+backend/uvicorn.log

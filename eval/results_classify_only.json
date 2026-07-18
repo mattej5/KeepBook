@@ -1,0 +1,99 @@
+{
+  "summary": {
+    "model": "gemma4:e4b",
+    "runtime": "ollama",
+    "docs_scored": 5,
+    "doc_type_correct": 5,
+    "doc_type_total": 5,
+    "doc_type_accuracy": 1.0,
+    "field_correct": 0,
+    "field_total": 0,
+    "field_accuracy": 0.0,
+    "classify_only_docs": 3,
+    "silent_wrong_values": 0,
+    "flag_coverage": null,
+    "flag_coverage_silent_wrong": "0/0",
+    "flag_coverage_all_errors": null,
+    "flag_coverage_all_errors_counts": "0/0",
+    "median_latency_s": 10.31,
+    "hand_ensemble_ran": false,
+    "hand_field_correct": 0,
+    "hand_field_total": 0,
+    "hand_field_accuracy": null,
+    "hand_all_fields_flagged": null,
+    "hand_median_latency_s": null,
+    "ensemble_agreed_fields": 0,
+    "ensemble_disputed_fields": 0,
+    "agreement_precision": null,
+    "agreement_precision_counts": "0/0",
+    "disputed_e4b_correct_rate": null,
+    "disputed_e4b_correct_counts": "0/0"
+  },
+  "per_doc": [
+    {
+      "file": "brokerage_stmt_01.png",
+      "latency_s": 20.72,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "BROKERAGE STATEMENT",
+        "predicted": "BROKERAGE STATEMENT",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "charitable_receipt_01.png",
+      "latency_s": 9.16,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "CHARITABLE RECEIPT",
+        "predicted": "CHARITABLE RECEIPT",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "letter_01.png",
+      "latency_s": 10.31,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "UNRECOGNIZED",
+        "predicted": "UNRECOGNIZED",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "receipt_01.png",
+      "latency_s": 15.27,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "UNRECOGNIZED",
+        "predicted": "UNRECOGNIZED",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "w9_01.png",
+      "latency_s": 6.89,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-9",
+        "predicted": "W-9",
+        "correct": true
+      },
+      "fields": {}
+    }
+  ]
+}
