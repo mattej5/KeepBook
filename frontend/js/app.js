@@ -213,7 +213,12 @@
     renderProcessing({ pending: files.length, processing: null, done: baseDone });
     $("process-btn").disabled = true;
     $("process-btn").textContent = "Processing…";
-    api.intake(files).then(function () { pollQueue(true); }).catch(function () {
+    api.intake(files).then(function (r) {
+      // Remember this batch's doc ids so the done-state can tell whether any
+      // came back assigned to a client (drives the honest done copy, #4).
+      if (state.processing) state.processing.batchIds = (r && r.queued) || [];
+      pollQueue(true);
+    }).catch(function () {
       toast("Couldn’t reach the model — is the model server running?");
       state.processing = null;
       $("process-btn").disabled = false;
@@ -255,15 +260,30 @@
         if (q.pending === 0 && !q.processing) {
           clearInterval(state.polling); state.polling = null;
           var n = state.processing ? state.processing.total : q.done;
+          var batchIds = (state.processing && state.processing.batchIds) || [];
           state.processing = null;
           $("process-btn").disabled = true;
           $("process-btn").textContent = "Process files";
           if (state.view === "capture") {
-            $("queue-block").innerHTML =
-              '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
-              '<div class="rl-empty">Sorted into per-client bins. <a href="#" id="to-review">Review them →</a></div>';
-            var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
-            renderCaptureOp();
+            // The "sorted into per-client bins" line is only honest when a doc
+            // actually landed in a client bin. Nothing is filed to a client
+            // until confirm, so a batch that came back all-unassigned reads
+            // "ready for review" instead. Default to bins on any lookup failure.
+            var paintDone = function (assignedAny) {
+              $("queue-block").innerHTML =
+                '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
+                '<div class="rl-empty">' + (assignedAny ? "Sorted into per-client bins." : "Ready for review.") +
+                ' <a href="#" id="to-review">Review them →</a></div>';
+              var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
+              renderCaptureOp();
+            };
+            if (batchIds.length) {
+              api.getDocuments().then(function (docs) {
+                paintDone(docs.some(function (d) { return batchIds.indexOf(d.id) >= 0 && d.client_id; }));
+              }).catch(function () { paintDone(true); });
+            } else {
+              paintDone(true);
+            }
           }
           toast(n + " document" + (n === 1 ? "" : "s") + " ready in Review");
         }
