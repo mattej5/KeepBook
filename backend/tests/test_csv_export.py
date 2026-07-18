@@ -241,3 +241,46 @@ def test_export_unknown_client_is_404(csv_client):
     client, _main = csv_client
     resp = client.get("/clients/client_nope/export.csv")
     assert resp.status_code == 404
+
+
+def test_export_emits_one_row_for_fieldless_confirmed_doc(csv_client):
+    """A confirmed classify-only doc (extract:false -> no fields) still exports
+    one 'document received' row instead of vanishing from the sheet.
+
+    Additive: this test injects its own confirmed field-less doc into STATE
+    (the fixture restores documents/clients after yield), so it never perturbs
+    the seeded field-bearing rows the other tests pin.
+    """
+    client, main = csv_client
+    with main.STATE_LOCK:
+        main.STATE["documents"]["doc_fieldless"] = {
+            "id": "doc_fieldless",
+            "client_id": "client_ruth_okafor",
+            "status": "confirmed",
+            "doc_type": "charitable receipt",
+            "image_path": "uploads/doc_fieldless.png",
+            "received_at": "2026-07-18T08:00:00Z",
+            "fields": {},
+            "source_name": "charity_01.png",
+        }
+
+    resp = client.get("/clients/client_ruth_okafor/export.csv")
+    assert resp.status_code == 200
+    rows = _rows(resp.text)
+
+    fieldless = [r for r in rows if r["doc_id"] == "doc_fieldless"]
+    assert len(fieldless) == 1
+    row = fieldless[0]
+    assert row["field_key"] == "document"
+    assert row["field_label"] == "Document received"
+    assert row["value"] == "charitable receipt"
+    assert row["doc_type"] == "charitable receipt"
+    assert row["corrected"] == "false"
+    assert row["original_value"] == ""
+    assert row["low_confidence"] == "false"
+
+    # Ruth's field-bearing 1099-INT rows are untouched — additive, not replacing.
+    assert {r["field_key"] for r in rows if r["doc_id"] == "doc_001"} == {
+        "payer",
+        "box1_interest_income",
+    }

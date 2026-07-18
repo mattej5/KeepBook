@@ -206,7 +206,7 @@
       if (okType) { try { f._url = URL.createObjectURL(f); } catch (e) {} }
       state.dropped.push(f);
     }
-    if (rejected) toast(rejected + (rejected === 1 ? " file" : " files") + " skipped — KeepBook reads images, not PDFs");
+    if (rejected) toast(rejected + (rejected === 1 ? " file" : " files") + " skipped — KeepBook reads images only (PNG/JPG)");
     renderCapture();
   }
 
@@ -227,7 +227,12 @@
     renderProcessing({ pending: files.length, processing: null, done: baseDone });
     $("process-btn").disabled = true;
     $("process-btn").textContent = "Processing…";
-    api.intake(files).then(function () { pollQueue(true); }).catch(function () {
+    api.intake(files).then(function (r) {
+      // Remember this batch's doc ids so the done-state can tell whether any
+      // came back assigned to a client (drives the honest done copy, #4).
+      if (state.processing) state.processing.batchIds = (r && r.queued) || [];
+      pollQueue(true);
+    }).catch(function () {
       toast("Couldn’t reach the model — is the model server running?");
       state.processing = null;
       $("process-btn").disabled = false;
@@ -269,15 +274,30 @@
         if (q.pending === 0 && !q.processing) {
           clearInterval(state.polling); state.polling = null;
           var n = state.processing ? state.processing.total : q.done;
+          var batchIds = (state.processing && state.processing.batchIds) || [];
           state.processing = null;
           $("process-btn").disabled = true;
           $("process-btn").textContent = "Process files";
           if (state.view === "capture") {
-            $("queue-block").innerHTML =
-              '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
-              '<div class="rl-empty">Sorted into per-client bins. <a href="#" id="to-review">Review them →</a></div>';
-            var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
-            renderCaptureOp();
+            // The "sorted into per-client bins" line is only honest when a doc
+            // actually landed in a client bin. Nothing is filed to a client
+            // until confirm, so a batch that came back all-unassigned reads
+            // "ready for review" instead. Default to bins on any lookup failure.
+            var paintDone = function (assignedAny) {
+              $("queue-block").innerHTML =
+                '<div class="section-label">Done · ' + n + ' document' + (n === 1 ? "" : "s") + ' ready</div>' +
+                '<div class="rl-empty">' + (assignedAny ? "Sorted into per-client bins." : "Ready for review.") +
+                ' <a href="#" id="to-review">Review them →</a></div>';
+              var lnk = $("to-review"); if (lnk) lnk.onclick = function (e) { e.preventDefault(); show("review"); };
+              renderCaptureOp();
+            };
+            if (batchIds.length) {
+              api.getDocuments().then(function (docs) {
+                paintDone(docs.some(function (d) { return batchIds.indexOf(d.id) >= 0 && d.client_id; }));
+              }).catch(function () { paintDone(true); });
+            } else {
+              paintDone(true);
+            }
           }
           toast(n + " document" + (n === 1 ? "" : "s") + " ready in Review");
         }
@@ -659,6 +679,11 @@
       renderDetail(updated.id);
       // refresh the list so the confirmed doc drops out of "needs review"
       api.getDocuments().then(function (docs) {
+        // Refresh the "N awaiting review" op-notes here so they don't read one
+        // high until an unrelated re-render (the confirm just moved a doc out of
+        // the review queue). Same fresh docs we already fetched.
+        var opEl = $("review-op"); if (opEl) opEl.textContent = opSummary(docs);
+        var capEl = $("capture-op"); if (capEl) capEl.textContent = opSummary(docs);
         var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized" || d.status === "error"; });
         var listEl = $("review-list");
         listEl.innerHTML = needs.length ? needs.map(function (d) {
@@ -706,8 +731,13 @@
       var grid = $("client-grid");
       grid.innerHTML = clients.map(function (c) { return clientCardHtml(c, docs); }).join("");
 
-      grid.querySelectorAll("[data-req]").forEach(function (b) {
-        b.onclick = function () { toast("Chase email drafted for " + b.dataset.req); };
+      grid.querySelectorAll("[data-req-client]").forEach(function (b) {
+        b.onclick = function () {
+          var c = clients.filter(function (x) { return x.id === b.dataset.reqClient; })[0];
+          if (!c) return;
+          window.location.href = chaseMailtoHref(c);
+          toast("Draft opened in your mail app");
+        };
       });
       // Quiet "+ New client" affordance at the end of the grid (ghost card that
       // expands into an inline create form).
@@ -836,6 +866,30 @@
     });
   }
 
+  // Build a real mailto: draft chasing a client's still-missing documents.
+  // Frontend-only (works offline, same in mock mode). Every interpolated value
+  // is URL-encoded; body newlines are CRLF (%0D%0A after encoding). No claims
+  // are fabricated — the body lists exactly the expected-minus-received items.
+  function chaseMailtoHref(c) {
+    var received = {};
+    (c.received_docs || []).forEach(function (t) { received[t] = true; });
+    var missing = (c.expected_docs || []).filter(function (t) { return !received[t]; });
+    var subject = "Missing tax documents — " + c.name;
+    var lines = [
+      "Hi " + c.name + ",",
+      "",
+      "As we prepare your 2025 return, we're still missing the following documents:",
+      ""
+    ];
+    missing.forEach(function (t) { lines.push("- " + t); });
+    lines.push("");
+    lines.push("Could you send these over when you have a moment? Reply to this email or upload them at your convenience.");
+    lines.push("");
+    lines.push("Thank you.");
+    var body = lines.join("\r\n");
+    return "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+  }
+
   function clientCardHtml(c, docs) {
     var received = {};
     (c.received_docs || []).forEach(function (t) { received[t] = true; });
@@ -877,8 +931,24 @@
         '<div class="grow"><div class="c-label">' + esc(t) + '</div>' +
         '<div class="c-sub">Not received yet</div></div>' +
         '<span class="missing-flag">MISSING</span>' +
-        '<button class="request-link" data-req="' + esc(c.name) + '" style="margin-left:12px">Request</button></div>';
+        '<button class="request-link" data-req-client="' + esc(c.id) + '" style="margin-left:12px">Request</button></div>';
     }).join("");
+
+    // Confirmed doc types that match no expected checklist item — otherwise
+    // they'd be filed and exported but invisible on the card. Listed quietly
+    // under the checklist with their received date, only when nonempty.
+    var expectedSet = {};
+    c.expected_docs.forEach(function (t) { expectedSet[t] = true; });
+    var alsoReceived = (c.received_docs || []).filter(function (t) { return !expectedSet[t]; });
+    var alsoHtml = "";
+    if (alsoReceived.length) {
+      alsoHtml = '<div class="also-received"><span class="ar-label">Also received:</span> ' +
+        alsoReceived.map(function (t) {
+          var m = meta[t] || {};
+          return '<span class="ar-item">' + esc(t) +
+            (m.date ? ' <span class="ar-date">(' + esc(m.date) + ')</span>' : '') + '</span>';
+        }).join(", ") + '</div>';
+    }
 
     var badge = complete
       ? '<span class="client-badge-complete">all in ✓</span>'
@@ -891,6 +961,7 @@
       '<div class="client-head-right">' + frac + badge + '</div></div>' +
       '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
       rows +
+      alsoHtml +
       '<div class="client-foot"><a class="export-csv-link" href="' + esc(api.exportCsvUrl(c.id)) +
       '" download="' + esc(c.id) + '.csv" title="Confirmed documents as CSV — imports anywhere">Export CSV ↓</a></div>' +
       '</div></div>';
