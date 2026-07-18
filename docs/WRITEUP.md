@@ -6,7 +6,9 @@ Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51
 
 ## KeepBook — on-device tax document intake for the firms that can't use cloud AI
 
-**Track:** On-Device AI with Gemma 4
+**Subtitle (Kaggle field):** Gemma 4 reads the documents, a human confirms every field, and no byte of a client's tax life ever leaves the laptop.
+
+**Track:** Edge / On-Device Track
 **Team:** Vin Jones (solo, with AI agents)
 **Repo:** https://github.com/mattej5/KeepBook
 **Demo machine:** MacBook M4 Pro, 24GB unified memory. All inference local.
@@ -26,7 +28,7 @@ Drop a folder of scanned or photographed tax documents into KeepBook. Gemma 4, r
 
 Nothing is trusted without review: every extraction passes a human who confirms or corrects it (wrong value struck in red, correction in ink blue, both preserved). Corrections are counted, so the **correction rate** becomes a live accuracy metric measured on the user's real documents.
 
-No byte of client data leaves the machine. That's not a privacy preference — it's the reason this product can exist at all. Local inference doesn't make the tool compliant; it removes the third-party processor entirely.
+No byte of client data leaves the machine. That's not a privacy preference — it's the reason this product can exist at all. Local inference doesn't make the tool compliant; it removes the third-party processor entirely. The economics compound the argument: intake is seasonal and bursty (hundreds of vision calls per firm per February week), so a per-token cloud bill is exactly wrong-shaped for this workload — on-device inference makes the marginal document free.
 
 ### Model stack
 
