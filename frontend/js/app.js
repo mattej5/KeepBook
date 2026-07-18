@@ -400,7 +400,15 @@
       var el = $("review-detail");
       var imgUrl = api.imageUrl(doc);
       var imgHtml = imgUrl
-        ? '<div class="doc-image"><img src="' + imgUrl + '" alt="source document"></div>'
+        ? '<div class="doc-image">' +
+            '<div class="doc-image-scroll"><img src="' + imgUrl + '" alt="source document"></div>' +
+            '<div class="zoom-controls">' +
+              '<button type="button" class="zbtn zout" title="Zoom out" aria-label="Zoom out">−</button>' +
+              '<span class="zbtn zpct" aria-live="polite">Fit</span>' +
+              '<button type="button" class="zbtn zin" title="Zoom in" aria-label="Zoom in">+</button>' +
+              '<button type="button" class="zbtn zfit" title="Fit to pane">Fit</button>' +
+            '</div>' +
+          '</div>'
         : '<div class="doc-image"><div class="noimg">No preview available</div></div>';
 
       var confirmed = doc.status === "confirmed";
@@ -529,6 +537,7 @@
 
       el.className = "detail";
       el.innerHTML = imgHtml + '<div class="fields">' + right + '</div>';
+      setupZoom(el);
 
       var cb = $("confirm-btn"); if (cb) cb.onclick = function () { doConfirm(doc); };
       var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
@@ -582,6 +591,76 @@
         if (det.open && !det.dataset.loaded) { det.dataset.loaded = "1"; renderTrace(doc.id, det.querySelector(".trace-body")); }
       });
     });
+  }
+
+  // Zoom for the Review source image. Zoom state (zi) is a fresh closure local per
+  // renderDetail call — selecting a different document rebuilds the pane and resets
+  // to Fit, so no zoom bleeds between docs. zi = -1 → Fit (image fills pane width);
+  // otherwise zi indexes ZOOM_STEPS, a percentage of the image's natural size.
+  function setupZoom(root) {
+    var scroll = root.querySelector(".doc-image-scroll");
+    var img = scroll && scroll.querySelector("img");
+    if (!scroll || !img) return null;
+    var ZOOM_STEPS = [100, 150, 200, 300, 400];
+    var MAX = ZOOM_STEPS.length - 1;
+    var zi = -1;
+    var pctEl = root.querySelector(".zpct");
+    var inBtn = root.querySelector(".zin");
+    var outBtn = root.querySelector(".zout");
+    var fitBtn = root.querySelector(".zfit");
+
+    function apply() {
+      if (zi < 0) {
+        img.style.width = "";          // fall back to CSS width:100% — fit-to-pane
+        img.style.maxWidth = "";
+        scroll.classList.remove("zoomed");
+        if (pctEl) pctEl.textContent = "Fit";
+      } else {
+        var pct = ZOOM_STEPS[zi];
+        var natural = img.naturalWidth || img.clientWidth || 0;
+        img.style.maxWidth = "none";
+        img.style.width = natural ? Math.round(natural * pct / 100) + "px" : pct + "%";
+        scroll.classList.add("zoomed");
+        if (pctEl) pctEl.textContent = pct + "%";
+      }
+      if (inBtn) inBtn.disabled = zi >= MAX;
+      if (outBtn) outBtn.disabled = zi < 0;
+    }
+    function setZoom(i) {
+      zi = i < -1 ? -1 : (i > MAX ? MAX : i);
+      apply();
+    }
+
+    if (inBtn) inBtn.onclick = function () { setZoom(zi + 1); };
+    if (outBtn) outBtn.onclick = function () { setZoom(zi - 1); };
+    if (fitBtn) fitBtn.onclick = function () { setZoom(-1); };
+    // double-click toggles Fit <-> 200%
+    img.addEventListener("dblclick", function () { setZoom(zi < 0 ? 2 : -1); });
+    // cmd/ctrl + wheel zooms (plain wheel keeps native scroll untouched)
+    scroll.addEventListener("wheel", function (e) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      setZoom(e.deltaY < 0 ? zi + 1 : zi - 1);
+    }, { passive: false });
+    // drag-to-pan when zoomed (native scroll also works)
+    var pan = null;
+    scroll.addEventListener("pointerdown", function (e) {
+      if (!scroll.classList.contains("zoomed") || e.button !== 0) return;
+      pan = { x: e.clientX, y: e.clientY, l: scroll.scrollLeft, t: scroll.scrollTop };
+      scroll.classList.add("grabbing");
+      try { scroll.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    scroll.addEventListener("pointermove", function (e) {
+      if (!pan) return;
+      scroll.scrollLeft = pan.l - (e.clientX - pan.x);
+      scroll.scrollTop = pan.t - (e.clientY - pan.y);
+    });
+    function endPan() { pan = null; scroll.classList.remove("grabbing"); }
+    scroll.addEventListener("pointerup", endPan);
+    scroll.addEventListener("pointercancel", endPan);
+
+    apply();
+    return { setZoom: setZoom, apply: apply, steps: ZOOM_STEPS };
   }
 
   function renderTrace(id, bodyEl) {

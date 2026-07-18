@@ -263,7 +263,10 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 }
 
 /* ---------- Bin Review ---------- */
-.review-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; }
+/* Review earns the same wide canvas as the dashboard — the freed width flows
+   into the detail (source image + fields), not into padding. */
+main:has(#view-review.active) { max-width: 1320px; }
+.review-layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
 .review-list { display: flex; flex-direction: column; gap: 10px; }
 .rl-item {
   text-align: left; background: var(--card); border: 1px solid var(--line);
@@ -282,13 +285,44 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 .rl-badge.error { background: #fbe6e2; color: var(--red); }
 .rl-empty { font-size: 13px; color: var(--faint); padding: 12px 4px; }
 
-.detail { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+/* Image pane takes the lion's share; fields cap at ~460px so lines stay readable. */
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 16px; }
 .doc-image {
-  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper-deep);
-  min-height: 300px; display: flex; align-items: center; justify-content: center;
+  position: relative; border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; background: var(--paper-deep);
 }
-.doc-image img { width: 100%; height: auto; display: block; }
+.doc-image-scroll {
+  overflow: auto; min-height: 300px; max-height: 640px;
+  display: flex; align-items: center; justify-content: center;
+}
+/* At >fit sizes the image is placed top-left so native scroll reaches every edge
+   (flex-centering an overflowing child can trap the top-left corner). */
+.doc-image-scroll.zoomed { display: block; cursor: grab; }
+.doc-image-scroll.grabbing { cursor: grabbing; }
+.doc-image img { width: 100%; height: auto; max-width: 100%; display: block; }
 .doc-image .noimg { color: var(--faint); font-size: 13px; padding: 40px; text-align: center; }
+
+/* Zoom controls — small paper/ink chip pinned in the pane's corner. */
+.zoom-controls {
+  position: absolute; right: 10px; bottom: 10px; z-index: 5;
+  display: flex; align-items: stretch;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: var(--shadow-soft); overflow: hidden;
+}
+.zbtn {
+  border: none; background: none; cursor: pointer; color: var(--ink);
+  font-family: var(--font-sans); font-size: 15px; line-height: 1;
+  padding: 6px 10px; min-width: 32px;
+}
+.zbtn + .zbtn { border-left: 1px solid var(--line); }
+.zbtn:hover { background: var(--paper-deep); color: var(--ink-blue); }
+.zbtn:disabled { color: var(--faint); cursor: default; background: none; }
+.zbtn.zpct {
+  min-width: 50px; font-size: 12px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--muted); cursor: default;
+}
+.zbtn.zpct:hover { background: none; color: var(--muted); }
+.zbtn.zfit { font-size: 12px; font-weight: 600; }
 
 .fields h2 { font-size: 16px; font-weight: 700; margin: 0 0 3px; }
 .fields .doc-sub { font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
