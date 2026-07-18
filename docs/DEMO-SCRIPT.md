@@ -12,7 +12,7 @@ Hybrid structure per docs/USER-JOURNEY.md: 30s story cold-open → feature tour 
   - `1098_clean_01.png` — **name correction plant + careful-mode flip beat**: lender reads `Coppell Bank` for `Copperline Bank` (consistent across 3 variants); this is the exact doc REGION_PASS fixes if you do the live flip
   - `1099int_photo_01.png` — 2/3 + 1 honestly-flagged miss (shows the low-confidence flag)
   - `receipt_01.png` — the UNRECOGNIZED plant
-- [ ] Seed state loaded: Ruth Okafor (one confirm from complete), Marcus Whitfield (missing 1099-INT), Chen partnership (missing K-1 + 1098)
+- [ ] Seed state loaded via `./scripts/demo_state.sh big` — the 8-client seed (reads as real software); it preserves the canonical trio and their exact script states: Ruth Okafor (one confirm from complete), Marcus Whitfield (missing 1099-INT), Chen partnership (missing K-1 + 1098). Fallback restore (`fallback`) unchanged.
 - [ ] Fallback restore command sitting in a ready terminal (T43)
 - [ ] Wi-Fi OFF if T40 passed with it off — say so out loud in the demo
 
