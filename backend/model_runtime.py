@@ -48,7 +48,7 @@ def _model_name() -> str:
     return os.environ.get("MODEL_NAME", "gemma4:e4b")
 
 
-def _post_json(url: str, payload: dict, headers: dict, timeout: int = 300) -> dict:
+def _post_json(url: str, payload: dict, headers: dict, timeout: int = 60) -> dict:
     data = json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as resp:

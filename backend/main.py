@@ -8,10 +8,12 @@ Run:  uvicorn main:app --port 8100      (from backend/, venv active)
 """
 
 import base64
+import copy
 import json
 import math
 import os
 import re
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,6 +30,9 @@ import pipeline
 # Paths
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Real source dir, captured once. Tests monkeypatch BASE_DIR to a tmp dir; the
+# git-sha stamp must still resolve against the actual repo, so keep it separate.
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 STATE_PATH = os.path.join(BASE_DIR, "state.json")
 EVENTS_PATH = os.path.join(BASE_DIR, "events.jsonl")
@@ -67,6 +72,32 @@ STATE = {
 }
 QUEUE = []             # pending doc ids awaiting processing
 PROCESSING = None      # id currently being processed, or None
+
+# Config stamp for /health — resolved once at startup (docs/IMPROVEMENTS.md #12).
+STARTED_AT = None
+GIT_SHA = None
+
+
+def _git_sha() -> str:
+    """Short HEAD sha of the source repo, or 'unknown' if git is unavailable."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=_SRC_DIR,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return out.stdout.strip() or "unknown"
+    except Exception:  # noqa: BLE001 - health must never fail on a git hiccup
+        return "unknown"
+
+
+def _reset_processing() -> None:
+    """Clear PROCESSING under the lock. Used by the worker's failure guard."""
+    global PROCESSING
+    with STATE_LOCK:
+        PROCESSING = None
 
 
 def _persist_locked() -> None:
@@ -143,7 +174,9 @@ def _wrap_fields(plain: dict, retried: bool = False) -> dict:
     return out
 
 
-def _write_raws(doc_id: str, calls: list, doc: dict) -> str:
+def _write_raws(
+    doc_id: str, calls: list, doc: dict, latency: float = None, retried: bool = False
+) -> str:
     """Persist the exact per-call model I/O for one document (auditability).
 
     Returns the event-facing reference path (relative to backend/).
@@ -158,6 +191,8 @@ def _write_raws(doc_id: str, calls: list, doc: dict) -> str:
         "model_name": os.environ.get("MODEL_NAME", "gemma4:e4b"),
         "status": doc.get("status"),
         "doc_type": doc.get("doc_type"),
+        "latency_s": latency,
+        "retried": retried,
         "calls": calls,
     }
     with open(os.path.join(BASE_DIR, rel), "w", encoding="utf-8") as fh:
@@ -169,91 +204,139 @@ def _write_raws(doc_id: str, calls: list, doc: dict) -> str:
 # Background worker — sequential, one document at a time.
 # ---------------------------------------------------------------------------
 def _worker_loop() -> None:
-    global PROCESSING
+    """Drain the queue forever. Each step is guarded so a persist/IO failure
+    records a worker_error event instead of killing the daemon (IMPROVEMENTS #9)."""
     while True:
         WAKE.wait(timeout=1.0)
-        with STATE_LOCK:
-            if not QUEUE:
-                WAKE.clear()
-                doc_id = None
-            else:
-                doc_id = QUEUE.pop(0)
-                PROCESSING = doc_id
-                doc = STATE["documents"].get(doc_id)
-                img_path = _abs_image_path(doc) if doc else ""
-        if doc_id is None:
-            continue
-
-        result = None
-        error = None
-        t0 = time.time()
-        # Raw-I/O capture: wrap the pipeline's bound model hook for the duration
-        # of this one document so every call's exact prompt + raw response is
-        # recorded (incl. retries). Worker is the only sequential model caller;
-        # the original binding (real adapter or a test fake) is restored in
-        # finally BEFORE the doc reaches a terminal status.
-        calls = []
-        orig_extract = pipeline.model_extract
-
-        def _capturing_extract(image_b64, prompt, *args, **kwargs):
-            try:
-                resp = orig_extract(image_b64, prompt, *args, **kwargs)
-            except Exception as exc:
-                calls.append({"seq": len(calls) + 1, "prompt": prompt, "error": str(exc)})
-                raise
-            calls.append({"seq": len(calls) + 1, "prompt": prompt, "response": resp})
-            return resp
-
-        pipeline.model_extract = _capturing_extract
         try:
-            with open(img_path, "rb") as fh:
-                img_b64 = base64.b64encode(fh.read()).decode()
-            result = pipeline.run_pipeline(img_b64)
-        except Exception as exc:  # noqa: BLE001 - never let the worker die
-            error = str(exc)
-        finally:
-            pipeline.model_extract = orig_extract
-        latency = round(time.time() - t0, 2)
-
-        low_conf_count = 0
-        with STATE_LOCK:
-            doc = STATE["documents"].get(doc_id)
-            if doc is not None:
-                if result is None:
-                    doc["status"] = "unrecognized"
-                    doc["doc_type"] = pipeline.UNRECOGNIZED
-                    doc["fields"] = {}
-                    doc["error"] = error
-                else:
-                    doc["status"] = result["status"]
-                    doc["doc_type"] = result["doc_type"]
-                    doc["fields"] = _wrap_fields(result["fields"], result.get("retried"))
-                    doc.pop("error", None)
-                low_conf_count = sum(
-                    1 for f in doc["fields"].values() if f.get("low_confidence")
-                )
-            PROCESSING = None
-            _persist_locked()
-
-        # Event log (append-only; drives /stats/timeline).
-        if doc is not None:
+            _worker_step()
+        except Exception as exc:  # noqa: BLE001 - the worker must never die
+            _reset_processing()
             try:
-                raw_ref = _write_raws(doc_id, calls, doc)
-            except OSError:
-                raw_ref = None
-            retried = bool(result.get("retried")) if result else False
-            fields_total = len(result["fields"]) if result else 0
-            ev_type = doc["status"] if doc["status"] in ("extracted", "unrecognized") else "extracted"
-            _append_event({
-                "type": ev_type,
-                "doc_id": doc_id,
-                "doc_type": doc["doc_type"],
-                "latency_s": latency,
-                "fields_total": fields_total,
-                "fields_low_confidence": low_conf_count,
-                "retried": retried,
-                "raw_ref": raw_ref,
-            })
+                _append_event({"type": "worker_error", "error": str(exc)})
+            except Exception:  # noqa: BLE001 - best-effort signal only
+                pass
+
+
+def _worker_step() -> None:
+    global PROCESSING
+    with STATE_LOCK:
+        if not QUEUE:
+            WAKE.clear()
+            doc_id = None
+        else:
+            doc_id = QUEUE.pop(0)
+            PROCESSING = doc_id
+            doc = STATE["documents"].get(doc_id)
+            img_path = _abs_image_path(doc) if doc else ""
+    if doc_id is None:
+        return
+
+    result = None
+    error = None
+    t0 = time.time()
+    # Raw-I/O capture: wrap the pipeline's bound model hook for the duration
+    # of this one document so every call's exact prompt + raw response is
+    # recorded (incl. retries). Worker is the only sequential model caller;
+    # the original binding (real adapter or a test fake) is restored in
+    # finally BEFORE the doc reaches a terminal status.
+    calls = []
+    orig_extract = pipeline.model_extract
+
+    def _capturing_extract(image_b64, prompt, *args, **kwargs):
+        try:
+            resp = orig_extract(image_b64, prompt, *args, **kwargs)
+        except Exception as exc:
+            calls.append({"seq": len(calls) + 1, "prompt": prompt, "error": str(exc)})
+            raise
+        calls.append({"seq": len(calls) + 1, "prompt": prompt, "response": resp})
+        return resp
+
+    pipeline.model_extract = _capturing_extract
+    try:
+        with open(img_path, "rb") as fh:
+            img_b64 = base64.b64encode(fh.read()).decode()
+        result = pipeline.run_pipeline(img_b64)
+    except Exception as exc:  # noqa: BLE001 - never let the worker die
+        error = str(exc)
+    finally:
+        pipeline.model_extract = orig_extract
+    latency = round(time.time() - t0, 2)
+
+    # Compute the terminal values, PERSIST THE RAW TRACE, and only then flip the
+    # observable status. A reader keying off status (the /trace endpoint) must
+    # never see "extracted" before the matching raws/<id>.json is on disk —
+    # otherwise it can serve a stale trace from an earlier document.
+    retried = bool(result.get("retried")) if result else False
+    if result is None:
+        # A raised model/IO call (unreachable model, timeout) is an OUTAGE, not
+        # honest confusion — distinct "error" status + machine-readable error,
+        # so the UI shows the red banner, never the "unrecognized" copy
+        # (IMPROVEMENTS #1).
+        new_status, new_doc_type, new_fields, new_error = (
+            "error",
+            pipeline.UNRECOGNIZED,
+            {},
+            error,
+        )
+    else:
+        new_status = result["status"]
+        new_doc_type = result["doc_type"]
+        new_fields = _wrap_fields(result["fields"], result.get("retried"))
+        new_error = None
+
+    try:
+        raw_ref = _write_raws(
+            doc_id,
+            calls,
+            {"status": new_status, "doc_type": new_doc_type},
+            latency,
+            retried,
+        )
+    except OSError:
+        raw_ref = None
+
+    low_conf_count = 0
+    with STATE_LOCK:
+        doc = STATE["documents"].get(doc_id)
+        if doc is not None:
+            doc["status"] = new_status
+            doc["doc_type"] = new_doc_type
+            doc["fields"] = new_fields
+            if new_error is not None:
+                doc["error"] = new_error
+            else:
+                doc.pop("error", None)
+            low_conf_count = sum(
+                1 for f in doc["fields"].values() if f.get("low_confidence")
+            )
+        PROCESSING = None
+        _persist_locked()
+
+    # Event log (append-only; drives /stats/timeline).
+    if doc is not None:
+        fields_total = len(result["fields"]) if result else 0
+        ev_type = (
+            new_status
+            if new_status in ("extracted", "unrecognized", "error")
+            else "extracted"
+        )
+        event = {
+            "type": ev_type,
+            "doc_id": doc_id,
+            "doc_type": new_doc_type,
+            "latency_s": latency,
+            "fields_total": fields_total,
+            "fields_low_confidence": low_conf_count,
+            "retried": retried,
+            "re_asks": int(result.get("re_asks", 0)) if result else 0,
+            "preprocessed": pipeline._preprocess_enabled(),
+            "model": os.environ.get("MODEL_NAME", "gemma4:e4b"),
+            "raw_ref": raw_ref,
+        }
+        if new_error is not None:
+            event["error"] = new_error
+        _append_event(event)
 
 
 # ---------------------------------------------------------------------------
@@ -270,10 +353,26 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _startup() -> None:
+    global STARTED_AT, GIT_SHA
+    STARTED_AT = _now_iso()
+    GIT_SHA = _git_sha()
     with STATE_LOCK:
         _load_state()
     t = threading.Thread(target=_worker_loop, name="keepbook-worker", daemon=True)
     t.start()
+
+
+@app.get("/health")
+async def health():
+    """Config stamp — one curl proves which code/model a process is serving."""
+    return {
+        "status": "ok",
+        "model_runtime": os.environ.get("MODEL_RUNTIME", "ollama"),
+        "model_name": os.environ.get("MODEL_NAME", "gemma4:e4b"),
+        "preprocess": pipeline._preprocess_enabled(),
+        "git_sha": GIT_SHA,
+        "started_at": STARTED_AT,
+    }
 
 
 # ---------------------------- Intake ---------------------------------------
@@ -338,6 +437,17 @@ async def intake(request: Request):
         ]
         if not uploads:
             raise HTTPException(400, 'no files under multipart field "file"')
+        # Images only — KeepBook renders no PDFs (IMPROVEMENTS #6). Reject a
+        # non-image upload loudly instead of silently coercing it to .png and
+        # producing a fake "unrecognized".
+        for up in uploads:
+            ext = os.path.splitext(up.filename or "")[1].lower()
+            if ext not in IMAGE_EXTS:
+                raise HTTPException(
+                    400,
+                    f"unsupported file type {ext or '(none)'!r} for {up.filename!r}; "
+                    "images only (png, jpg, jpeg, webp, gif, bmp)",
+                )
         with STATE_LOCK:
             for up in uploads:
                 data = await up.read()
@@ -353,12 +463,19 @@ async def intake(request: Request):
 @app.get("/queue")
 async def get_queue():
     with STATE_LOCK:
-        pending = len(QUEUE)
+        # Count docs still "pending", NOT len(QUEUE): the in-flight document is
+        # popped off QUEUE while it is being read, yet it is still pending until
+        # the worker writes a terminal status. Counting status keeps that
+        # in-flight doc visible so completion isn't declared a doc early
+        # (IMPROVEMENTS #3).
+        pending = sum(
+            1 for d in STATE["documents"].values() if d.get("status") == "pending"
+        )
         processing = PROCESSING
         done = sum(
             1
             for d in STATE["documents"].values()
-            if d.get("status") in ("extracted", "unrecognized", "confirmed")
+            if d.get("status") in ("extracted", "unrecognized", "confirmed", "error")
         )
     return {"pending": pending, "processing": processing, "done": done}
 
@@ -366,8 +483,11 @@ async def get_queue():
 # --------------------------- Documents -------------------------------------
 @app.get("/documents")
 async def get_documents():
+    # Deep-copy under the lock: the returned docs are serialized by Starlette
+    # AFTER this function exits, so handing out live dict references races the
+    # worker mid-mutation (IMPROVEMENTS #10).
     with STATE_LOCK:
-        return list(STATE["documents"].values())
+        return copy.deepcopy(list(STATE["documents"].values()))
 
 
 @app.get("/documents/{doc_id}")
@@ -376,7 +496,25 @@ async def get_document(doc_id: str):
         doc = STATE["documents"].get(doc_id)
         if doc is None:
             raise HTTPException(404, f"no document {doc_id}")
-        return doc
+        return copy.deepcopy(doc)
+
+
+@app.get("/documents/{doc_id}/trace")
+async def get_document_trace(doc_id: str):
+    """Serve the exact per-call model I/O captured for one document.
+
+    The observability money-shot: one click answers "what did the model see
+    and say?" (IMPROVEMENTS #4). Returns the raws/<id>.json record verbatim.
+    """
+    with STATE_LOCK:
+        doc = STATE["documents"].get(doc_id)
+        if doc is None:
+            raise HTTPException(404, f"no document {doc_id}")
+    raws_path = os.path.join(BASE_DIR, "raws", f"{doc_id}.json")
+    if not os.path.exists(raws_path):
+        raise HTTPException(404, f"no trace for {doc_id}")
+    with open(raws_path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 @app.get("/documents/{doc_id}/image")

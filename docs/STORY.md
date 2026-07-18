@@ -50,11 +50,16 @@ Everything we caught, prevented, or fixed tonight, recorded so no context window
 
 Each round: run the eval → break misses down by failure class → aim one targeted, principled tool at the biggest class → re-measure → keep only what beats a pre-declared numeric gate. No prompt-hacking toward test answers; interventions must generalize (preprocessing, validation-triggered re-asks, model routing).
 
-- Round 0: e4b + e2b baselines (the kill test at n=26).
-- Round 1: preprocessing (attacks photo-bucket empties) · targeted re-ask on format-failed fields (attacks silent money/ID wrongs) · e2b-classify cascade (attacks latency). Gates: photo +5pts w/o clean regression; silent-wrongs down w/ ≤4s latency cost; 26/26 classification w/ ≥3s saved.
-- Round 2+: re-aim at whatever class survives — per-field region crops (known form layouts), per-type prompt tightening for the weak 1098/1099-INT types.
-- Wildcard: `gemma4:12b` through the same harness — a third model column for one command.
-- Results: [fill final kept configuration + numbers per round before use]
+- Round 0: e4b 43.6% / 23 silent-wrongs; e2b 30.9% / 45 — the kill test at scale.
+- Round 1: **conditional preprocessing SHIPPED** (photo 26%→64%, clean byte-identical by sha, silent-wrongs down; v1 failed the gate by degrading clean scans — the clean-detector iteration fixed it). **Re-ask REJECTED** (converted honest misses into well-formatted wrongs on free-text fields; zero correct values overwritten — the guard held, the concept failed). **Cascade REJECTED** (single-resident-model swap cost makes it structurally unwinnable on 24GB).
+- Round 2: **region-crop pass: 92.5% fields, silent-wrongs 8 — failed the +6s latency gate at +10.5s, ships as "careful mode"** (`REGION_PASS=1`), an explicit measured tradeoff instead of a default.
+- Wildcard: 12b's vision latency exceeds the 60s serving envelope — e4b beats both neighbors on the axes that matter.
+- Handwriting ensemble (founder's 4 AM idea): dual-model read on handwritten docs; agreement-precision 75% vs 25% on disputes (n=12, preliminary); every handwritten field flagged regardless — the human gate is the feature.
+- Final shipped numbers: fast 62.3% / 21 SW / 17.7s · careful 92.5% / 8 SW / 28.2s · classification 29/29 everywhere.
+
+## 15. The handwritten SSN (the story to tell on stage)
+
+At 3 AM the founder's wife hand-filled three forms with a stylus so the eval would include real handwriting. At import, the curator noted one risk in writing: her 3s have flat tops — easy to read as 5s. Hours later, e4b read her handwritten SSN as **457**-88-2210 instead of 437 — the exact predicted misread, in perfect JSON, on the highest-stakes field, with no error and no warning. The review screen caught it. A predicted failure, walked into on schedule, caught by the gate built for it: the entire product in one true anecdote. (Also delightful: the *small* model beat the big one on handwriting, 8/12 vs 7/12 — which is why the dual-model agreement idea has legs.)
 
 **The flywheel (writeup future-section, real architecture):** every human correction in the review screen is a labeled example — the product generates its own eval data in normal use. Stats-for-Nerds is that flywheel's surface; nightly self-eval against accumulated corrections makes the recursion permanent after the hackathon.
 

@@ -1,0 +1,25 @@
+# Improvements — merged review panel, ranked
+
+Two independent reviewers (one Fable, one Opus) read the codebase blind to each other, observability-first per the judging framework. Items both found independently are marked **[CONVERGENT]** — highest confidence. Ranked by return-on-effort against tonight's goals (3 PM demo + judged writeup). Status column tracks execution.
+
+| # | Item | Tier | Effort | Found by | Status |
+|---|---|---|---|---|---|
+| 1 | **Model failure is invisible** — worker errors land as `status:"unrecognized"` with the real cause hidden in an unread `doc.error`; UI shows the "honest confusion" banner for an *outage*, making a scripted demo line false if Ollama dies on stage; no `.catch` on intake/poll so a dead backend freezes the UI silently. Fix: error status/badge + distinct banner + error in event log + fetch error toasts. | DEMO-CRITICAL | S/M | [CONVERGENT] | fix lane |
+| 2 | **One hung model call freezes the demo for 5 min** — `timeout=300` on a sequential worker. Fix: 60s timeout, fast-fail into the visible error state from #1. | DEMO-CRITICAL | S | Opus | fix lane |
+| 3 | **Queue declares done one doc early** — `pending:0` while `processing` non-null; last doc missing from Review ~18s; progress math also counts pre-seeded docs. Fix: done = `pending===0 && !processing`; baseline `done` at intake. | DEMO-CRITICAL | S | [CONVERGENT] | fix lane |
+| 4 | **Raw model trace written but unreachable** — every prompt/response persists in `backend/raws/` yet no endpoint or UI serves it. Fix: `GET /documents/{id}/trace` + "view model trace" disclosure in Review. The observability money-shot: one click answers "why did the model read this?" | CHEAP-WIN | S/M | [CONVERGENT] | fix lane |
+| 5 | **Field-label schema drift** — K-1/1099-INT/1098 render raw snake_case keys in Review (labels written against the mock schema); `partnership_ein` renders UNMASKED (privacy story). W-2 path is safe. Fix: six labels + extend the mask set. | CHEAP-WIN | S | [CONVERGENT] | fix lane |
+| 6 | **UI invites PDFs it cannot process** — accept/copy promise PDFs; backend force-renames to .png → garbage → fake "unrecognized." Fix tonight: images-only copy + client filter + backend 400. PDF rendering = post. | CHEAP-WIN | S | [CONVERGENT] | fix lane |
+| 7 | **"Stats age out after 24h" is view-only** — no pruning exists; `events.jsonl` + `raws/` (cleartext SSNs) grow forever. Tonight: honest copy ("dashboard shows the last 24h"). Post: real retention for raws/events — this is a judge-question landmine ("what's your data retention?"). | CHEAP-WIN copy / POST retention | S / M | Opus | fix lane (copy) |
+| 8 | **Demo-beat reconciliation** — the "clean W-2 confirm, fifteen seconds" beat must use a pre-verified image (staged folder plant), and the writeup must present silent-wrongs as the designed narrative, not get ambushed by them. | DEMO-CRITICAL prep | S | Opus | morning prep |
+| 9 | **Worker thread can die silently** — unguarded `_persist_locked` in the terminal block; one exception kills the daemon and the queue stalls forever with no signal. Fix: try/except around the worker body. | CHEAP-WIN | S | Opus | fix lane |
+| 10 | **`/documents` serializes live mutable dicts outside the lock** — poll landing mid-mutation can 500 or ship a half-updated doc. Fix: deep-copy snapshot under the lock (as `/confirm` already does). | CHEAP-WIN | S | Fable | fix lane |
+| 11 | **Nerd screen polish** — renders median only (p95 computed but unshown), "live" dot with no refresh interval, UTC hour labels at a 3 PM MDT demo; extraction events drop `re_asks` and don't record `preprocessed`/`model`. | CHEAP-WIN | S | Fable | fix lane |
+| 12 | **`/health` config stamp** — `{model_runtime, model_name, preprocess, git_sha, started_at}` so a stale/misconfigured serving process is one curl away from visible (tonight's stale-server incident, generalized). | CHEAP-WIN | S | Fable | fix lane |
+| 13 | **Masked TIN/SSN fields cannot be corrected** — highest-stakes field class has no correction path; contradicts "review catches everything" under questioning. Post: editable-with-masked-display. Tonight: scripted Q&A answer. | POST-HACKATHON | M | Fable | Q&A crib |
+| 14 | **Zero-byte/duplicate uploads accepted silently**; mock-adapter schema drift vs production. | POST-HACKATHON | S/M | both (split) | backlog |
+| 15 | **Model-quality next steps** (from tonight's gated experiments): region-crop pass (in flight), money/TIN-only re-ask with stricter acceptance (proposed, gated), e4b/12b disagreement-ensemble as a "careful mode" toggle (doubles latency, kills silent-wrongs). | POST unless region lands | M/L | orchestrator | region in flight |
+
+Resolved during review: the stale-serving-process finding (Fable #1) — the server was restarted with current code mid-review (verified: 24 zero-filled buckets, all four categories, p95 present). The `/health` stamp (#12) is its permanent fix.
+
+Notable positive findings, both reviewers: backend concurrency is sound (single RLock, atomic `os.replace` writes, restart re-enqueues pending docs); test suite green; W-2 hero path schema-correct end-to-end.

@@ -111,7 +111,25 @@ def main() -> int:
     field_correct = 0
     field_total = 0
     silent_wrong = 0
+    # flag_coverage bookkeeping: of the fields the model got wrong, how many
+    # carried low_confidence=True (were surfaced for human review).
+    silent_wrong_flagged = 0            # verdict == "wrong" AND low_confidence
+    error_total = 0                     # verdict in ("wrong", "missing")
+    error_flagged = 0                   # those with low_confidence
     latencies = []
+    # Handwriting-ensemble bookkeeping (HAND_ENSEMBLE). Hand bucket = the pen-
+    # filled docs; agreement-precision measures whether small/large agreement
+    # actually carries signal (of AGREED fields, % correct) vs the disputed set
+    # (of DISPUTED fields, % where the kept e4b value was correct anyway).
+    hand_field_correct = 0
+    hand_field_total = 0
+    hand_all_flagged = True             # every hand field carried low_confidence
+    hand_latencies = []
+    ens_agreed_total = 0
+    ens_agreed_correct = 0
+    ens_disputed_total = 0
+    ens_disputed_e4b_correct = 0
+    ensemble_ran = False
 
     for name in names:
         path = os.path.join(args.docs, name)
@@ -130,23 +148,53 @@ def main() -> int:
         doc_type_correct += int(type_ok)
 
         pred_fields = result.get("fields", {}) or {}
+        low_conf = result.get("low_confidence", {}) or {}
+        disputed_map = result.get("disputed", {}) or {}
+        hand_ens = result.get("hand_ensemble")
+        is_hand = "hand" in name  # the pen-filled bucket (w2/1099nec/1098 _hand_)
+        if is_hand:
+            hand_latencies.append(dt)
+        if hand_ens:
+            ensemble_ran = True
         field_results = {}
         for key, exp_val in (exp.get("fields") or {}).items():
             field_total += 1
             verdict = score_field(exp_val, pred_fields.get(key))
+            flagged = bool(low_conf.get(key, False))
+            field_disputed = bool(disputed_map.get(key, False))
             if verdict == "correct":
                 field_correct += 1
             elif verdict == "wrong":
                 silent_wrong += 1  # present + well-formed but wrong == silent wrong
+                silent_wrong_flagged += int(flagged)
+            if verdict in ("wrong", "missing"):
+                error_total += 1
+                error_flagged += int(flagged)
+            if is_hand:
+                hand_field_total += 1
+                hand_field_correct += int(verdict == "correct")
+                if not flagged:
+                    hand_all_flagged = False  # gate: every hand field must be flagged
+                if hand_ens:
+                    if field_disputed:
+                        ens_disputed_total += 1
+                        ens_disputed_e4b_correct += int(verdict == "correct")
+                    else:
+                        ens_agreed_total += 1
+                        ens_agreed_correct += int(verdict == "correct")
             field_results[key] = {
                 "expected": exp_val,
                 "predicted": pred_fields.get(key, None),
                 "verdict": verdict,
+                "low_confidence": flagged,
+                "disputed": field_disputed,
             }
 
         per_doc.append({
             "file": name,
             "latency_s": round(dt, 2),
+            "handwritten": bool(result.get("handwritten", False)),
+            "hand_ensemble": hand_ens,
             "doc_type": {
                 "expected": exp_type,
                 "predicted": pred_type,
@@ -161,6 +209,19 @@ def main() -> int:
     dt_pct = 100.0 * doc_type_correct / n if n else 0.0
     field_pct = 100.0 * field_correct / field_total if field_total else 0.0
     median_lat = statistics.median(latencies) if latencies else 0.0
+    # flag_coverage: fraction of silent-wrong fields that were flagged
+    # low_confidence (the review-catch rate on the dangerous, present-but-wrong
+    # class). all_errors variant folds in missing fields too.
+    flag_cov = (silent_wrong_flagged / silent_wrong) if silent_wrong else None
+    flag_cov_all = (error_flagged / error_total) if error_total else None
+
+    # Handwriting-ensemble metrics (present only when hand docs were scored).
+    hand_field_acc = (hand_field_correct / hand_field_total) if hand_field_total else None
+    hand_med_lat = statistics.median(hand_latencies) if hand_latencies else None
+    agreement_prec = (ens_agreed_correct / ens_agreed_total) if ens_agreed_total else None
+    disputed_e4b_rate = (
+        ens_disputed_e4b_correct / ens_disputed_total
+    ) if ens_disputed_total else None
 
     summary = {
         "model": args.model,
@@ -173,14 +234,49 @@ def main() -> int:
         "field_total": field_total,
         "field_accuracy": round(field_pct / 100, 4),
         "silent_wrong_values": silent_wrong,
+        "flag_coverage": round(flag_cov, 4) if flag_cov is not None else None,
+        "flag_coverage_silent_wrong": f"{silent_wrong_flagged}/{silent_wrong}",
+        "flag_coverage_all_errors": round(flag_cov_all, 4) if flag_cov_all is not None else None,
+        "flag_coverage_all_errors_counts": f"{error_flagged}/{error_total}",
         "median_latency_s": round(median_lat, 2),
+        # --- handwriting ensemble (HAND_ENSEMBLE) ---
+        "hand_ensemble_ran": ensemble_ran,
+        "hand_field_correct": hand_field_correct,
+        "hand_field_total": hand_field_total,
+        "hand_field_accuracy": round(hand_field_acc, 4) if hand_field_acc is not None else None,
+        "hand_all_fields_flagged": hand_all_flagged if hand_field_total else None,
+        "hand_median_latency_s": round(hand_med_lat, 2) if hand_med_lat is not None else None,
+        "ensemble_agreed_fields": ens_agreed_total,
+        "ensemble_disputed_fields": ens_disputed_total,
+        "agreement_precision": round(agreement_prec, 4) if agreement_prec is not None else None,
+        "agreement_precision_counts": f"{ens_agreed_correct}/{ens_agreed_total}",
+        "disputed_e4b_correct_rate": round(disputed_e4b_rate, 4) if disputed_e4b_rate is not None else None,
+        "disputed_e4b_correct_counts": f"{ens_disputed_e4b_correct}/{ens_disputed_total}",
     }
 
     print()
     print(f"doc-type accuracy:   {doc_type_correct}/{n} ({dt_pct:.1f}%)")
     print(f"field accuracy:      {field_correct}/{field_total} ({field_pct:.1f}%)")
     print(f"silent wrong values: {silent_wrong}")
+    fc_str = f"{flag_cov:.1%}" if flag_cov is not None else "n/a"
+    fca_str = f"{flag_cov_all:.1%}" if flag_cov_all is not None else "n/a"
+    print(f"flag coverage (silent-wrong): {silent_wrong_flagged}/{silent_wrong} ({fc_str})")
+    print(f"flag coverage (all errors):   {error_flagged}/{error_total} ({fca_str})")
     print(f"median latency:      {median_lat:.1f}s")
+    if hand_field_total:
+        print()
+        print("--- handwriting bucket ---")
+        ha_str = f"{hand_field_acc:.1%}" if hand_field_acc is not None else "n/a"
+        print(f"hand field accuracy: {hand_field_correct}/{hand_field_total} ({ha_str})  [gate: >= 7/12]")
+        print(f"all hand fields flagged low_confidence: {hand_all_flagged}")
+        if hand_med_lat is not None:
+            print(f"hand median latency: {hand_med_lat:.1f}s")
+        if ensemble_ran:
+            ap_str = f"{agreement_prec:.1%}" if agreement_prec is not None else "n/a"
+            dp_str = f"{disputed_e4b_rate:.1%}" if disputed_e4b_rate is not None else "n/a"
+            print(f"agreement-precision: {ens_agreed_correct}/{ens_agreed_total} ({ap_str})"
+                  f"  [gate: > base rate {ha_str}]")
+            print(f"disputed, e4b-correct-anyway: {ens_disputed_e4b_correct}/{ens_disputed_total} ({dp_str})")
 
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump({"summary": summary, "per_doc": per_doc}, fh, indent=2)

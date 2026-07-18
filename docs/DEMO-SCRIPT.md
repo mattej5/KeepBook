@@ -41,7 +41,11 @@ Hybrid structure per docs/USER-JOURNEY.md: 30s story cold-open → feature tour 
 
 **2:20 — Evidence**
 
-> "We didn't guess the trust model — we measured it. Same synthetic W-2 to Gemma's two smallest on-device sizes: the 2-billion model returned a wrong dollar amount for tax withheld — clean JSON, confident, indistinguishable from right. The 4-billion model got six out of six. We ran a [N]-document eval across clean scans, phone photos, and junk documents: [doc-type accuracy], [field accuracy], and the silent-wrong-value count is the number we watch. That result is why we ship the bigger model AND mandatory review."
+> "We didn't guess the trust model — we measured it. Same synthetic W-2 to Gemma's two smallest on-device sizes: the 2-billion model returned a wrong dollar amount for tax withheld — clean JSON, confident, indistinguishable from right. The 4-billion model got six out of six. So we built a 29-document eval — clean scans, phone photos, junk documents, and real handwriting: [doc-type accuracy], [field accuracy], and the silent-wrong-value count is the number we watch."
+
+**The SSN story** [tell this one with relish — it's true and it's the whole product in 20 seconds]:
+
+> "My favorite result from last night: at 3 AM, my wife hand-filled tax forms with a stylus so we could test real handwriting. When we imported them, we noted one risk: she writes her 3s with a flat top — easy to mistake for a 5. Hours later the model read her handwritten SSN... and made *exactly* that mistake. 457 instead of 437. Perfect JSON. Wrong identity. No error, no warning — unless you have a review screen. We predicted the failure, the model walked into it, and the red pen caught it. That's why the human gate isn't a fallback in this product. It's the product."
 
 **2:45 — Close**
 
@@ -63,7 +67,10 @@ We assume it isn't, and built the product around that. Our own kill test caught 
 We ship the smallest model that passed our kill test. e2b failed it — silently wrong money value. e4b passed 6/6 at ~20s/doc on this hardware. We didn't ship 12b because we have no evidence it buys accuracy we need, and it costs latency we'd feel.
 
 **"What about handwriting / really messy documents?"**
-Tested honestly: our eval set includes phone-photo degradations [and handwritten if T23 done]. Where it degrades, the failure mode is designed to be loud, not silent — low confidence lands in review, junk lands in Unrecognized. Stated limitation, not a hidden one.
+Tested honestly with real pen-filled forms: the model reads handwriting at [58%] of fields — and its misses look like a careless human's ("Celesle" for "Celeste", a flat-topped 3 read as 5). Our policy: handwritten documents are *always* flagged for full review, no exceptions — but even so, confirming a pre-filled field takes a couple of seconds while typing it takes fifteen. The model is the typist; the reviewer stays the accountant. [If the ensemble experiment landed: we also cross-check handwriting with two model sizes — agreement raises confidence, disagreement raises the flag — but the human gate stays regardless.]
+
+**"Isn't 60-something percent extraction bad?"**
+It would be, if we hid it. Instead it's the design input: extraction is fallible, so review is mandatory, corrections are one click, and the correction rate is on a screen. The economics still work — verifying a filled field is ~5x faster than retyping it, so even correcting a third of fields, the bookkeeper finishes far ahead of manual entry. And the alternative wasn't better AI, it was no AI at all.
 
 **"Who pays for this?"**
 The firm — per-seat, seasonal peak. The buyer is the person liable for the data: solo bookkeepers, small CPA firms. They can't use cloud AI at any price, so the alternative isn't a cheaper competitor — it's retyping.

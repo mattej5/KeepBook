@@ -80,6 +80,11 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: new files in labels.json; rerun eval covers them.
   Evidence: _none_
 
+- [x] **T24 — REGION_PASS gated accuracy pass (Round 2)** (agent)
+  DoD: per-field region crops (`backend/regions.py`, fractional boxes) + `REGION_PASS` flag in `pipeline.py` (default OFF until gated) that re-reads each empty/format-failed/name field from a padded crop with a single-field call; teeth on acceptance (format check for money/TIN, label-blacklist + len≥3 for names); `run_eval.py` gains `flag_coverage`; cross-field validators (W-2 box2<box1, money>0, label-echo) feed low_confidence. GATES vs the shipping-config baseline (`results_final_e4b.json`, PREPROCESS=1 RE_ASK=0 CASCADE=0): field accuracy +≥5, silent_wrong ≤16, median latency +≤6s.
+  Verify: coordinate sanity by cropping real testset images and reading them; killer test on the 1098 lender; full gated 29-doc run.
+  Evidence: **VERDICT — ships default OFF: 2/3 gates PASS massively, latency gate FAILS.** Coordinate sanity: cropped + eye-read 13 (doc_type,field) pairs across clean/photo/hand (preprocess de-warps photos to ~1700×1055 so the same fractions land on the same boxes; clean+hand renders pass through byte-identical). Killer test (1 GPU call): 1098 lender whole-image `'Coppell Bank'` → region-crop `'Copperline Bank'` (correct), crop calls 3.2–3.8s warm. Full gated run `MODEL_RUNTIME=ollama PREPROCESS=1 RE_ASK=0 CASCADE=0 REGION_PASS=1 run_eval.py --model gemma4:e4b --out results_e4b_region.json` (uncontended GPU, verified no concurrent run_eval): field **66→98/106 (+32, 62.3%→92.5%, +30.2pp) PASS**; silent_wrong **21→8 PASS**; median latency **17.7→28.2s (+10.5s) FAIL** (each doc fires 2 mandatory name re-reads + empties at ~3.5s; ≤6s is structurally unreachable with names-always on this host). K-1 recovered 16/16 previously-empty fields; lender/payer/garbled-name reads fixed. Name-field replacement audit: 33 fixes, **1 regression** (`w2_hand_01` employer `'Hollow Pine Outfitters'`→`'Hollow Pine Outfitters\n802 Timberline Rd'` — box c crop includes the address; true replacements 14 correct / 1 wrong). flag_coverage on silent-wrongs = **0/8** before AND after validators (the 8 remaining are format-valid plausible misreads — wrong-digit TINs/SSNs, plausible money — that no deterministic check catches; baseline was 0/21). `results_e4b_region.json` committed. `pipeline.py`/`run_eval.py` also carry the concurrent HAND_ENSEMBLE lane's uncommitted edits (shared tree). Commit `84cf766`.
+
 ## Phase 3 — Frontend (owner V; target ~12:30 PM)
 
 - [ ] **T30 — Capture/Submit screen** (V)
@@ -116,15 +121,15 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: `run_test.py` equivalent through the courier adapter path returns 6/6 on the W-2, or the failure is documented.
   Evidence: _none_
 
-- [ ] **T42 — Demo seed data** (agent)
+- [x] **T42 — Demo seed data** (agent)
   DoD: `state.json` with 3 clients matching docs/USER-JOURNEY.md — Ruth Okafor (complete after one confirm), Marcus Whitfield (missing 1099-INT), Chen partnership (missing K-1 + 1098).
   Verify: dashboard renders the three rows with exactly those gaps.
-  Evidence: _none_
+  Evidence: `backend/state.demo.json` (5 docs, images copied from `eval/testset/` + `eval/w2_test.png`, real labels.json field values). `./scripts/demo_state.sh seed` against the RUNNING :8100 server → `GET /clients` → `client_ruth_okafor` expected `["W-2","1099-INT","1098"]` received `["1099-INT","1098"]` (doc_003 W-2 sits `status:"extracted"` — the confirm moment); `client_marcus_whitfield` expected `["W-2","1099-INT"]` received `["W-2"]` (1099-INT has no document at all); `client_chen_partnership` expected `["K-1","1098"]` received `[]` (zero docs). `GET /documents/doc_003` → W-2 extracted, all 5 fields filled, awaiting review. `GET /documents/doc_005` → `UNRECOGNIZED`, `fields:{}`, `client_id:null` (receipt awaiting manual classification). `doc_004` (Marcus's confirmed W-2, `eval/w2_test.png`) carries the correction already recorded: `box2_fed_withheld:{"value":"9,183.44","corrected":true,"original_value":"70,110.00"}` — the exact kill-test number from docs/API.md and PRD. Image serving: `doc_001`..`doc_005` all `200 image/png`. `GET /queue` → `{"pending":0,"processing":null,"done":5}` (nothing stuck). Seed left loaded per instructions. Commit `4712c53`.
 
-- [ ] **T43 — Pre-processed fallback session** (agent)
+- [x] **T43 — Pre-processed fallback session** (agent)
   DoD: a fully-processed backup `state.json` + one-command restore, for use if live processing stalls on stage.
   Verify: restore command swaps state and dashboard renders instantly.
-  Evidence: _none_
+  Evidence: `backend/state.fallback.json` (adds doc_006 Marcus 1099-INT confirmed + doc_007 Chen K-1 confirmed, plus doc_003 flips to `confirmed`) + `scripts/demo_state.sh` (portable bash 3.2, no assoc arrays — stages images from `eval/` into `backend/uploads/` since `uploads/` is gitignored, copies the chosen state file to `backend/state.json`, then kill+restarts uvicorn on :8100 because `main.py` only loads state at the FastAPI startup event, no hot-reload path). `./scripts/demo_state.sh fallback` against the running server → `GET /clients`: Ruth `received_docs:["1099-INT","1098","W-2"]` (3/3 complete), Marcus `["W-2","1099-INT"]` (2/2 complete), Chen `["K-1"]` (1/2, mostly complete — 1098 still open, matches DoD "mostly complete" not staged as suspiciously perfect). `doc_003` status flips `extracted`→`confirmed`. `doc_006`/`doc_007` images `200 image/png`. Then `./scripts/demo_state.sh seed` run again → dashboard flips back to the T42 gaps (verified above) and left loaded as the final state. Commit `4712c53`.
 
 - [ ] **T44 — FREEZE at 1:00 PM** (all)
   DoD: no feature code after 1:00 PM; only demo prep, writeup, and fixes for demo-blocking bugs.

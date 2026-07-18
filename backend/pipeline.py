@@ -18,6 +18,7 @@ import json
 import os
 import re
 
+import regions
 from model_runtime import extract as model_extract
 
 
@@ -71,9 +72,16 @@ FIELD_SCHEMA = {
 
 # ---------------------------------------------------------------------------
 # Model-call strategies (env-flagged, independently toggleable)
-#   RE_ASK=1 (default ON) -> after extraction, one focused follow-up per
+#   RE_ASK=1 (default OFF) -> after extraction, one focused follow-up per
 #               empty/malformed field (fill-only, never overwrites a value that
 #               already passes its format check). Cap REASK_CAP calls per doc.
+#               Default OFF per the A/B gate (eval/results_e4b_tools.json vs
+#               eval/results.json): field accuracy rose 41->44 but 4 empty
+#               fields came back as well-formed WRONG values (silent-wrongs
+#               23->27) and median latency rose ~5s. All 4 bad fills were
+#               free-text name fields, where field_format_ok accepts any
+#               non-empty string, so the acceptance gate has no teeth there.
+#               The never-overwrite guard itself held: zero correct->wrong.
 #   CASCADE=1 (default OFF) -> classify on the small model
 #               (CASCADE_CLASSIFY_MODEL), extract on MODEL_NAME. A small-model
 #               UNRECOGNIZED is confirmed on the extraction model before the
@@ -82,9 +90,24 @@ FIELD_SCHEMA = {
 #               classify is no faster than e4b (~6.7s vs ~5.9s median) and each
 #               cascade doc pays a 7-13s e2b<->e4b model reload, so total
 #               latency rises instead of dropping.
+#   REGION_PASS=1 (default OFF until gated) -> after the whole-image extraction,
+#               for each field that is empty, fails its format check, OR is a
+#               name/entity field (names have no format to fail — exactly where
+#               whole-image reads drift on small text), crop that field's region
+#               (backend/regions.py, fractional boxes so they survive preprocess
+#               and any resolution) and make ONE single-field call on the crop.
+#               Acceptance has TEETH so it can't repeat the RE_ASK silent-wrong
+#               failure: format-checkable fields must pass their format check;
+#               name fields are accepted only if non-empty AND not a box-label
+#               echo (regions.looks_like_label) AND length >= 3. A value that
+#               already passes its format check is never overwritten EXCEPT a
+#               name field, where the higher-resolution crop read is preferred
+#               over a differing whole-image read (counted separately). Cap
+#               REGION_CAP crop calls per document.
 # Read at call time so eval/tests can toggle per run.
 # ---------------------------------------------------------------------------
 REASK_CAP = 3
+REGION_CAP = 6
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -93,6 +116,11 @@ def _flag(name: str, default: str = "1") -> bool:
 
 def _classify_model() -> str:
     return os.environ.get("CASCADE_CLASSIFY_MODEL", "gemma4:e2b")
+
+
+def _hand_ensemble_model() -> str:
+    """The SMALL model used to cross-check handwritten docs (HAND_ENSEMBLE)."""
+    return os.environ.get("HAND_ENSEMBLE_MODEL", "gemma4:e2b")
 
 
 # Human box descriptions for the focused re-ask prompt. These are IRS form
@@ -133,12 +161,16 @@ def build_classify_prompt() -> str:
         "You are a US tax-document intake classifier. Look at this document image "
         "and decide which single IRS form it is.\n"
         "Return STRICT JSON only, no prose, no markdown:\n"
-        '{"doc_type": "<TYPE>"}\n'
+        '{"doc_type": "<TYPE>", "handwritten": true}\n'
         f"where <TYPE> is EXACTLY one of: {types}, or "
         f'"{UNRECOGNIZED}" if it is not one of those forms (for example a '
         "receipt, a letter, or any non-tax document).\n"
         "Do not guess a tax form when the document is clearly not one — return "
-        f'"{UNRECOGNIZED}" instead.'
+        f'"{UNRECOGNIZED}" instead.\n'
+        'Set "handwritten" to true if the values filled into the form (the names, '
+        "numbers and dollar amounts) are written by hand in pen or pencil, or false "
+        "if those entries are typed or machine-printed. Judge ONLY the filled-in "
+        "entries — the blank form template itself is always printed."
     )
 
 
@@ -165,6 +197,21 @@ def build_reask_prompt(doc_type: str, key: str) -> str:
         '{"value": "..."}\n'
         "Use the EXACT value printed on the form. If it is genuinely not "
         'present, use an empty string "".'
+    )
+
+
+def build_region_prompt(doc_type: str, key: str) -> str:
+    """Single-field prompt for a cropped region (REGION_PASS strategy)."""
+    desc = regions.region_desc(doc_type, key) or FIELD_DESCRIPTIONS.get(
+        (doc_type, key), key
+    )
+    return (
+        f"This is a cropped region of a {doc_type} tax form. "
+        f"Read the value of {desc}.\n"
+        "Return STRICT JSON only, no prose, no markdown:\n"
+        '{"value": "..."}\n'
+        "Return the EXACT value printed on the form, not the box label. If the "
+        'value is genuinely not present, use an empty string "".'
     )
 
 
@@ -202,6 +249,28 @@ def is_money_key(key: str) -> bool:
     return any(tok in k for tok in _MONEY_KEY_TOKENS)
 
 
+def is_tin_key(key: str) -> bool:
+    k = key.lower()
+    return k == "ssn" or "tin" in k or "ein" in k
+
+
+def is_name_field(key: str) -> bool:
+    """A free-text field with no format to fail (name / entity / payer / lender).
+
+    These are exactly the fields where field_format_ok has no teeth (it accepts
+    any non-empty string), so REGION_PASS always re-reads them from a crop.
+    """
+    return not is_money_key(key) and not is_tin_key(key)
+
+
+def parse_money(value):
+    """Parse a money string to float, or None. Mirrors eval/run_eval.norm_money."""
+    try:
+        return float(re.sub(r"[,$\s]", "", str(value)))
+    except (ValueError, TypeError):
+        return None
+
+
 def field_format_ok(key: str, value) -> bool:
     """Deterministic format check for the low_confidence signal. No probabilities."""
     v = str(value or "").strip()
@@ -225,6 +294,36 @@ def field_format_ok(key: str, value) -> bool:
 def field_low_confidence(key: str, value, retried: bool = False) -> bool:
     """True from honest signals only: extraction retried, empty, or bad format."""
     return bool(retried) or not field_format_ok(key, value)
+
+
+def compute_low_confidence(doc_type: str, fields: dict, retried: bool = False) -> dict:
+    """Per-field low_confidence flags from deterministic signals only.
+
+    Base signal (field_low_confidence): extraction retried, empty, or a format
+    check that fails (SSN regex; TIN/EIN = 9 digits, which already covers
+    recipient_tin and partnership_ein; money must parse). Extended with
+    cross-field validators, none of which use probabilities:
+      * value echoes a known box-label string  -> flag
+      * money field parses to a non-positive number -> flag
+      * W-2: box 2 (fed withheld) must parse < box 1 (wages); else flag box 2.
+    """
+    lc = {}
+    for key, value in fields.items():
+        flag = field_low_confidence(key, value, retried)
+        if regions.looks_like_label(value):
+            flag = True
+        if is_money_key(key):
+            m = parse_money(value)
+            if m is not None and m <= 0:
+                flag = True
+        lc[key] = flag
+    # W-2 arithmetic sanity: federal withholding is a fraction of wages.
+    if doc_type == "W-2":
+        b1 = parse_money(fields.get("box1_wages", ""))
+        b2 = parse_money(fields.get("box2_fed_withheld", ""))
+        if b1 is not None and b2 is not None and b2 >= b1:
+            lc["box2_fed_withheld"] = True
+    return lc
 
 
 def correction_category(key: str) -> str:
@@ -282,11 +381,35 @@ def _call_and_parse(image_b64: str, prompt: str, model: str = None):
     return parsed2, raw2, True
 
 
+def _coerce_bool(v) -> bool:
+    """Coerce a model's JSON handwritten flag to a real bool.
+
+    Gemma sometimes returns the string "true"/"false" instead of a JSON bool.
+    """
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "yes", "1", "handwritten")
+    return False
+
+
 def classify(image_b64: str, model: str = None):
+    """Return (doc_type, handwritten, raw, retried).
+
+    handwritten is the model's judgement of whether the FILLED-IN values are
+    pen/pencil vs machine-printed (build_classify_prompt asks for it as a second
+    JSON key). Defaults False when absent/unparseable — the ensemble path only
+    activates on a positive signal, so a missing key fails safe to normal intake.
+    """
     parsed, raw, retried = _call_and_parse(image_b64, build_classify_prompt(), model=model)
     if parsed is None:
-        return UNRECOGNIZED, raw, retried
-    return normalize_doc_type(parsed.get("doc_type")), raw, retried
+        return UNRECOGNIZED, False, raw, retried
+    return (
+        normalize_doc_type(parsed.get("doc_type")),
+        _coerce_bool(parsed.get("handwritten")),
+        raw,
+        retried,
+    )
 
 
 def classify_cascade(image_b64: str):
@@ -297,11 +420,11 @@ def classify_cascade(image_b64: str):
     once on the extraction model before accepting the reject — this protects
     both the reject path and any form the small model failed to recognize.
     """
-    dt, raw, retried = classify(image_b64, model=_classify_model())
+    dt, hand, raw, retried = classify(image_b64, model=_classify_model())
     if dt == UNRECOGNIZED:
-        dt2, raw2, retried2 = classify(image_b64)  # extraction model (MODEL_NAME)
-        return dt2, raw2, (retried or retried2)
-    return dt, raw, retried
+        dt2, hand2, raw2, retried2 = classify(image_b64)  # extraction model (MODEL_NAME)
+        return dt2, hand2, raw2, (retried or retried2)
+    return dt, hand, raw, retried
 
 
 def extract_fields(image_b64: str, doc_type: str, model: str = None):
@@ -350,6 +473,122 @@ def apply_reask(image_b64: str, doc_type: str, fields: dict, model: str = None):
     return updated, n
 
 
+def apply_region_pass(image_b64: str, doc_type: str, fields: dict, model: str = None):
+    """REGION_PASS strategy: re-read fields from per-field region crops.
+
+    A field is re-read when it has a region entry AND (it is empty, OR it fails
+    its format check, OR it is a name/entity field — names can't be format-
+    validated, so they are always re-checked at higher crop resolution). For
+    each, crop the region (fractional box, so it survives preprocess) and make
+    one single-field call on the crop.
+
+    Acceptance (with teeth, unlike free-text RE_ASK):
+      * format-checkable field (money / TIN / SSN): accept only if the crop read
+        passes its format check. Such a field is re-read only when its current
+        value already failed, so this never overwrites a good value.
+      * name/entity field: accept only if the crop read is non-empty, is not a
+        box-label echo, and has length >= 3. If the current value was
+        empty/failed -> fill. If the current value was a good (non-empty) name
+        and the crop read DIFFERS -> prefer the crop read (higher resolution
+        strictly dominates) and count it as a replacement.
+
+    At most REGION_CAP crop calls per document.
+
+    Returns (updated_fields, n_calls, replacements) where replacements is a list
+    of (key, old_value, new_value) for good-name -> crop-name swaps.
+    """
+    updated = dict(fields)
+    n = 0
+    replacements = []
+    for key in FIELD_SCHEMA[doc_type]:
+        if n >= REGION_CAP:
+            break
+        if not regions.has_region(doc_type, key):
+            continue
+        cur = updated.get(key, "")
+        name_field = is_name_field(key)
+        if not name_field and field_format_ok(key, cur):
+            continue  # good money/TIN -> never re-ask, never overwrite
+        crop_b64 = regions.crop_region_b64(image_b64, doc_type, key)
+        if crop_b64 is None:
+            continue
+        n += 1
+        raw = model_extract(crop_b64, build_region_prompt(doc_type, key), model=model)
+        parsed = parse_json(raw)
+        if not parsed:
+            continue
+        new_val = parsed.get("value", "")
+        new_val = "" if new_val is None else str(new_val).strip()
+        if not new_val:
+            continue
+        if name_field:
+            if regions.looks_like_label(new_val) or len(new_val) < 3:
+                continue  # reject label echoes / too-short reads
+            if not cur:
+                updated[key] = new_val  # fill an empty/failed name
+            elif norm_string(new_val) != norm_string(cur):
+                updated[key] = new_val  # prefer the higher-resolution crop read
+                replacements.append((key, cur, new_val))
+        else:
+            if field_format_ok(key, new_val):
+                updated[key] = new_val  # accept: crop read now passes format
+    return updated, n, replacements
+
+
+def norm_string(v) -> str:
+    """Casefolded, punctuation-stripped compare key (matches eval scoring)."""
+    s = re.sub(r"[^\w\s]", " ", str(v))
+    return " ".join(s.split()).casefold()
+
+
+def _fields_agree(key: str, a, b) -> bool:
+    """Do two model reads of one field agree under the eval's normalized rule?
+
+    Mirrors eval/run_eval.score_field: money compared within a 0.01 tolerance,
+    everything else (names, TIN/SSN/EIN) compared casefolded + depunctuated.
+    Either side empty -> not an agreement (an empty read carries no signal).
+    """
+    a_s, b_s = str(a).strip(), str(b).strip()
+    if not a_s or not b_s:
+        return False
+    if is_money_key(key):
+        ma, mb = parse_money(a_s), parse_money(b_s)
+        if ma is None or mb is None:
+            return False
+        return abs(ma - mb) <= 0.01
+    return norm_string(a_s) == norm_string(b_s)
+
+
+def apply_hand_ensemble(image_b64: str, doc_type: str, fields: dict, model_small: str):
+    """HAND_ENSEMBLE strategy: cross-check the e4b read against ONE e2b read.
+
+    Handwriting is ASSUMED to need a human, so the e4b value is ALWAYS kept and
+    the caller flags every field low_confidence. The small model is a
+    cross-check signal only — never substituted into the output. This makes ONE
+    small-model call for the whole field set (a single e4b<->e2b model swap per
+    document, never per field — per-field swapping on a one-resident-model host
+    would cost 7-13s each and is the failure mode this design exists to avoid).
+
+    Per field: agreed (small model matches under _fields_agree) leaves disputed
+    False; disagreement OR an empty small-model read sets disputed True so the UI
+    can surface it hotter.
+
+    Returns (disputed_map, {"agreed": n, "disputed": n}).
+    """
+    e2b_fields, _raw, _retried = extract_fields(image_b64, doc_type, model=model_small)
+    e2b_fields = e2b_fields or {}
+    disputed = {}
+    for key in FIELD_SCHEMA[doc_type]:
+        e4b_val = fields.get(key, "")
+        e2b_val = str(e2b_fields.get(key, "")).strip()
+        disputed[key] = not (e2b_val and _fields_agree(key, e4b_val, e2b_val))
+    counts = {
+        "agreed": sum(1 for v in disputed.values() if not v),
+        "disputed": sum(1 for v in disputed.values() if v),
+    }
+    return disputed, counts
+
+
 def run_pipeline(image_b64: str) -> dict:
     """Full two-step pipeline for one document image.
 
@@ -362,13 +601,19 @@ def run_pipeline(image_b64: str) -> dict:
         "extract_raw": str | None,
         "retried": bool,   # either model call needed a retry (low_confidence signal)
         "re_asks": int,    # focused single-field follow-up calls issued (RE_ASK)
+        "region_calls": int,          # single-field crop calls issued (REGION_PASS)
+        "region_replacements": list,  # (key, old, new) good-name -> crop-name swaps
+        "handwritten": bool,          # classifier judged the filled-in values hand-written
+        "hand_ensemble": dict|None,   # {"agreed": n, "disputed": n} when HAND_ENSEMBLE ran
+        "disputed": {key: bool},      # small-model disagreed/empty (surface hotter)
+        "low_confidence": {key: bool},  # per-field deterministic review flags
       }
     """
     image_b64 = _maybe_preprocess(image_b64)
     if _flag("CASCADE", "0"):
-        doc_type, classify_raw, c_retried = classify_cascade(image_b64)
+        doc_type, handwritten, classify_raw, c_retried = classify_cascade(image_b64)
     else:
-        doc_type, classify_raw, c_retried = classify(image_b64)
+        doc_type, handwritten, classify_raw, c_retried = classify(image_b64)
     if doc_type == UNRECOGNIZED:
         return {
             "status": "unrecognized",
@@ -378,6 +623,12 @@ def run_pipeline(image_b64: str) -> dict:
             "extract_raw": None,
             "retried": c_retried,
             "re_asks": 0,
+            "region_calls": 0,
+            "region_replacements": [],
+            "handwritten": handwritten,
+            "hand_ensemble": None,
+            "disputed": {},
+            "low_confidence": {},
         }
     fields, extract_raw, e_retried = extract_fields(image_b64, doc_type)
     if fields is None:
@@ -390,16 +641,47 @@ def run_pipeline(image_b64: str) -> dict:
             "extract_raw": extract_raw,
             "retried": c_retried or e_retried,
             "re_asks": 0,
+            "region_calls": 0,
+            "region_replacements": [],
+            "handwritten": handwritten,
+            "hand_ensemble": None,
+            "disputed": {},
+            "low_confidence": {},
         }
+    retried = c_retried or e_retried
     n_reasks = 0
-    if _flag("RE_ASK"):
+    if _flag("RE_ASK", "0"):
         fields, n_reasks = apply_reask(image_b64, doc_type, fields)
+    n_region = 0
+    region_replacements = []
+    if _flag("REGION_PASS", "0"):
+        fields, n_region, region_replacements = apply_region_pass(
+            image_b64, doc_type, fields
+        )
+    low_confidence = compute_low_confidence(doc_type, fields, retried)
+    hand_ensemble = None
+    disputed = {}
+    if handwritten and _flag("HAND_ENSEMBLE", "0"):
+        # Handwritten intake: cross-check the e4b read against one e2b read, then
+        # flag EVERY field for human review regardless of outcome (the human
+        # gate is the feature, not the fallback). Agreement keeps the value with
+        # the flag; disagreement keeps the e4b value + marks it disputed (hotter).
+        disputed, hand_ensemble = apply_hand_ensemble(
+            image_b64, doc_type, fields, _hand_ensemble_model()
+        )
+        low_confidence = {key: True for key in fields}
     return {
         "status": "extracted",
         "doc_type": doc_type,
         "fields": fields,
         "classify_raw": classify_raw,
         "extract_raw": extract_raw,
-        "retried": c_retried or e_retried,
+        "retried": retried,
         "re_asks": n_reasks,
+        "region_calls": n_region,
+        "region_replacements": region_replacements,
+        "handwritten": handwritten,
+        "hand_ensemble": hand_ensemble,
+        "disputed": disputed,
+        "low_confidence": low_confidence,
     }

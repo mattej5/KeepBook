@@ -1,0 +1,96 @@
+{
+  "documents": {
+    "doc_001": {
+      "id": "doc_001",
+      "client_id": "client_ruth_okafor",
+      "status": "confirmed",
+      "doc_type": "1099-INT",
+      "image_path": "uploads/doc_001.png",
+      "received_at": "2026-07-18T07:10:00Z",
+      "fields": {
+        "payer": {"value": "Cascade Federal Bank", "corrected": false},
+        "recipient_name": {"value": "Bianca F. Okafor", "corrected": false},
+        "box1_interest_income": {"value": "7,706.17", "corrected": false}
+      },
+      "source_name": "1099int_clean_01.png"
+    },
+    "doc_002": {
+      "id": "doc_002",
+      "client_id": "client_ruth_okafor",
+      "status": "confirmed",
+      "doc_type": "1098",
+      "image_path": "uploads/doc_002.png",
+      "received_at": "2026-07-18T07:12:00Z",
+      "fields": {
+        "lender": {"value": "Copperline Bank", "corrected": false},
+        "borrower_name": {"value": "Tobias G. Delacroix", "corrected": false},
+        "box1_mortgage_interest": {"value": "17,725.14", "corrected": false}
+      },
+      "source_name": "1098_clean_01.png"
+    },
+    "doc_003": {
+      "id": "doc_003",
+      "client_id": "client_ruth_okafor",
+      "status": "extracted",
+      "doc_type": "W-2",
+      "image_path": "uploads/doc_003.png",
+      "received_at": "2026-07-18T07:46:00Z",
+      "fields": {
+        "employee_name": {"value": "Gunnar N. Nakamura", "corrected": false},
+        "ssn": {"value": "480-31-3733", "corrected": false},
+        "employer": {"value": "Ironwood Manufacturing Inc.", "corrected": false},
+        "box1_wages": {"value": "97,262.94", "corrected": false},
+        "box2_fed_withheld": {"value": "14,179.97", "corrected": false}
+      },
+      "source_name": "w2_clean_02.png"
+    },
+    "doc_004": {
+      "id": "doc_004",
+      "client_id": "client_marcus_whitfield",
+      "status": "confirmed",
+      "doc_type": "W-2",
+      "image_path": "uploads/doc_004.png",
+      "received_at": "2026-07-18T07:36:15Z",
+      "fields": {
+        "employee_name": {"value": "Marcus D. Whitfield", "corrected": false},
+        "ssn": {"value": "412-55-9083", "corrected": false},
+        "employer": {"value": "Cascade Logistics LLC", "corrected": false},
+        "box1_wages": {"value": "68,420.15", "corrected": false},
+        "box2_fed_withheld": {"value": "9,183.44", "corrected": true, "original_value": "70,110.00"}
+      },
+      "source_name": "w2_test.png"
+    },
+    "doc_005": {
+      "id": "doc_005",
+      "client_id": null,
+      "status": "unrecognized",
+      "doc_type": "UNRECOGNIZED",
+      "image_path": "uploads/doc_005.png",
+      "received_at": "2026-07-18T07:47:00Z",
+      "fields": {},
+      "source_name": "receipt_01.png"
+    }
+  },
+  "clients": {
+    "client_ruth_okafor": {
+      "id": "client_ruth_okafor",
+      "name": "Ruth Okafor",
+      "expected_docs": ["W-2", "1099-INT", "1098"],
+      "received_docs": ["1099-INT", "1098"]
+    },
+    "client_marcus_whitfield": {
+      "id": "client_marcus_whitfield",
+      "name": "Marcus Whitfield",
+      "expected_docs": ["W-2", "1099-INT"],
+      "received_docs": ["W-2"]
+    },
+    "client_chen_partnership": {
+      "id": "client_chen_partnership",
+      "name": "Chen Partnership",
+      "expected_docs": ["K-1", "1098"],
+      "received_docs": []
+    }
+  },
+  "seq_doc": 5,
+  "seq_client": 3
+}

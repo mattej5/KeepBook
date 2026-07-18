@@ -1,46 +1,34 @@
-# Overnight Report — Sat Jul 18, ~2:00 AM
+# Morning Brief — Sat Jul 18 (supersedes the 2 AM version)
 
-What happened while you slept, what's true now, and your morning checklist. Claim labels: VERIFIED = observed directly; INFERRED = concluded from evidence.
+Everything below is committed and reproducible from `eval/results_final_*.json` and the docs. Claim labels: VERIFIED unless noted.
 
-## Headline
+## The headline
 
-**The product works end-to-end.** Backend + frontend integrated on the first real attempt (VERIFIED, walked in a real browser ~1:45 AM): folder/file intake → Gemma classifies + extracts (13-16s/doc two-step) → review screen with red-strike/blue-ink correction → confirm → per-client checklist inks in → stats + Stats-for-Nerds telemetry, all served from `localhost:8100`, zero external requests. State survives server restart. The receipt landed in UNRECOGNIZED, not force-fit.
+**The product works, is demo-hardened, and has honest numbers with an improvement arc.** Full E2E verified in a real browser (intake → extract → red-pen correct → confirm → checklist inks → nerd telemetry), 34 tests green, demo seed + fallback states staged, `/health` stamps the serving git sha.
 
-Run it: `cd backend && MODEL_RUNTIME=ollama .venv/bin/python -m uvicorn main:app --port 8100` → http://localhost:8100/
+## Final numbers (29-doc set: 12 clean, 12 photo, 2 junk, 3 real handwritten)
 
-## The eval saved us from ourselves (the "what broke at 2 AM" story)
+| | e4b FAST (ships) | e4b CAREFUL (`REGION_PASS=1`) | e2b (comparison) |
+|---|---|---|---|
+| Doc-type | 29/29 | 29/29 | 29/29 |
+| Fields | 66/106 (62.3%) | **98/106 (92.5%)** | 40/106 (37.7%) |
+| Silent wrongs | 21 | **8** | 36 |
+| Median latency | 17.7s | 28.2s | 13.0s |
 
-The overnight provisional eval returned 26/26 doc-type but **0/94 fields for BOTH models** — and that symmetry was the tell. Root cause (VERIFIED by image inspection + a crop experiment): the generated test images were full 2200px IRS pages with the form in the top 40%; after the vision encoder downscales, field text is illegible. e4b honestly returned empty strings; e2b hallucinated box labels. Same image cropped to the form region → e4b read the fields immediately. A second bug: the W-2 SSN value was overlaid outside its box. **The models were never broken — our test set was.** Codex wrote red tests pinning both bugs; an Opus agent is fixing the generator, regenerating all 26 images, and rerunning both models through the production pipeline. Final numbers: see eval/results.json (T21/T22 in TASKS.md) — if unchecked when you read this, the rerun was still in flight.
+- Improvement arc: raw baseline was **43.6%**; gated conditional preprocessing (photo bucket 26%→64%, clean untouched by sha-proof) took it to 62.3%; region-crop takes it to 92.5% at +10.5s/doc — failed the interactive-latency gate so it ships as a **mode**, not a default. Two flags, both gate-annotated: `REGION_PASS=1` (careful mode), `HAND_ENSEMBLE=1` (gates passed: agreement-precision 75% vs 25% on disputes, all hand fields always flagged, hand latency 1.9x; default off for demo latency).
+- Rejected with evidence (negative results are in the writeup): blind re-ask (converted misses into well-formatted wrongs), e2b-classify cascade (single-resident-model swap cost), 12b (vision latency exceeds the 60s serving envelope — so e4b beats both neighbors on the metrics that matter: e2b = half accuracy/double silent-wrongs, 12b = can't make the envelope).
+- Handwriting (Rachel's real pen strokes): 58% fields, misses are human-plausible — including the model reading the flat-topped 3 as a 5 in the SSN, **the exact misread predicted at import**. The story is in DEMO-SCRIPT ("The SSN story") — tell it.
 
-This is writeup gold: "our eval caught our own test set lying" is the eval-driven story judges score for.
+## What changed since 2 AM
 
-## Bugs found by the E2E + their status
-
-1. `/intake` collapsed repeated multipart keys → only 1 of N files queued. Caught by pinning the field name in the contract; backend fixed + verified with 26-file folder intake (commit 70211d0). CLOSED.
-2. `/stats/timeline` returns sparse buckets (1 instead of 24 zero-filled) and omits zero-count correction categories → nerd screen renders one giant bar + "undefined". Codex red tests + backend fix in flight. Check backend/tests/test_timeline_contract.py is green in the morning.
-
-## Courier OS status (T41) — morning task, ~20 min
-
-- Installed v1.63.1, fully self-hosted, **no account needed** (server localhost:9100, CourierDB takes port 8000 — backend moved to 8100 for this). Local API key auto-wired into backend/.env. Both Gemma models downloaded into it: E4B (11.5GB 8-bit) + E2B (5GB).
-- Wire format: their API **accepted** the OpenAI image_url content part and began generating (INFERRED acceptance from a generation-stall 504 rather than a format 4xx). Never completed a response tonight — first attempt hit a pool/DB error (clean restart fixed that class), retry stalled mid-generation, almost certainly memory contention: Ollama's e4b was simultaneously loaded for eval reruns on a 24GB machine.
-- **Morning protocol (do in this order, quiet machine):** (1) quit Chrome + heavy apps; (2) `ollama stop gemma4:e4b; ollama stop gemma4:e2b`; (3) rerun the E2B image test (script: ask Claude, it has it staged); (4) if E2B answers, run E4B same way, then the kill test + a 5-doc eval subset with `MODEL_RUNTIME=courier MODEL_NAME="gemma4:e4b"` (nickname registered, matches Ollama tag); (5) record verdict in PRD §8 either way. Only a kill-test pass permits naming Courier anywhere public. Note for honesty: Courier's E4B is 8-bit (14GB), Ollama's is Q4 (9.6GB) — not identical weights; report as "runtime + quant" comparison.
-
-## Fleet ledger (who did what)
-
-- Backend + adapter + eval runner: built, verified, T10-T14 + T20 checked with evidence (Opus agent). Two-step pipeline 13-16s/doc.
-- Frontend: 4 screens incl. Stats for Nerds, mock + real modes, font vendored, zero external deps (Opus agent).
-- Test set generators + fix: Codex red tests → Opus fix + regen + eval reruns (in flight at time of writing).
-- Baseline test suites: API contract conformance + eval scoring rules (Codex, in flight).
-- Docs: ownership sweep to solo-Vin, dual-runtime PRD, demo script + Q&A crib, writeup draft, distribution path, this file.
+Review panel (independent Fable + Opus reviewers) → docs/IMPROVEMENTS.md → all demo-critical items FIXED and test-pinned: outages show red banners (never the honesty-feature copy), 60s bounded timeouts, honest queue completion, per-doc model trace one click away in Review, field labels/masking for all form types, images-only intake, worker crash-guard, `/health` with git sha. Demo seed (T42) + fallback (T43) live: `scripts/demo_state.sh seed|fallback`.
 
 ## Your morning checklist (in order)
 
-1. Coffee. Read this file. Check TASKS.md — anything checked overnight has evidence lines.
-2. Skim eval/results.json numbers → they flow into docs/WRITEUP.md bracketed slots (teammate-check rule: verify each number against the file before submitting).
-3. Courier bake-off (protocol above, ~20 min) → PRD §8 verdict → writeup "model stack" line.
-4. **Real phone photos** (T23): print 2-3 testset docs, photograph, label, rerun eval including them.
-5. **Wi-Fi off E2E** (T40) — the on-device proof; also your best demo rehearsal.
-6. Demo prep: T42 seed data + T43 fallback state (agents can do; ask Claude), then three stopwatch dry-runs (T50) with docs/DEMO-SCRIPT.md. Fill the "what broke at 2 AM" Q&A slot — the answer is the eval story above.
-7. 1:00 PM freeze → writeup final + submit (T51) → repo sweep (T52) → 3:00 PM.
+1. **Courier bake-off** (~20 min, quiet machine): quit Chrome/heavy apps → `ollama stop gemma4:e4b; ollama stop gemma4:e2b` → E2B image test through `localhost:9100/v1` (both models already downloaded; key in backend/.env; ask Claude for the staged script) → if it answers, kill test + 5-doc subset with `MODEL_RUNTIME=courier MODEL_NAME="gemma4:e4b"` → record verdict in PRD §8 either way. Only a pass lets the writeup name Courier.
+2. **Real phone photos** (T23): print or photograph-from-screen 2-3 testset docs, AirDrop in, tell Claude — import + label + rerun is automated.
+3. **Wi-Fi-off E2E with real browser drag-drop** (T40; also closes T30's last gap). Server start: `cd backend && MODEL_RUNTIME=ollama .venv/bin/python -m uvicorn main:app --port 8100`; check `curl localhost:8100/health` shows the current sha.
+4. **Three stopwatch dry-runs** (T50) with docs/DEMO-SCRIPT.md — the SSN story is scripted; optional beat to rehearse: flip `REGION_PASS=1` live on one doc ("careful mode") and watch a wrong field correct itself.
+5. **1:00 PM freeze** → fill any remaining WRITEUP brackets (runtime line from step 1) → **Kaggle submit** (T51, your login) → repo sweep (T52) → logistics (T53) → **3:00 PM**.
 
-Merge note: `agent/vin-overnight` → main is pre-authorized and will happen (or has happened) once the in-flight lanes land green — check `git log main` vs the branch.
+Merge status: agent/vin-overnight → main [see git log — if not yet merged, Claude merges when you confirm the morning session is up].
