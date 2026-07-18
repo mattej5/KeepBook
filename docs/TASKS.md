@@ -195,6 +195,11 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   Verify: template applies to a new client; per-client edit round-trips; a derived checklist matches the client's prior confirmed doc types.
   Evidence: _none_
 
+- [ ] **T68 — Progressive Web App packaging** (agent; POST-DEMO — added Sat AM per founder)
+  DoD: manifest.json (name, theme paper/ink colors, icons from logo-mark.svg rendered to 192/512 PNG), installability from localhost Chrome ("Install KeepBook" → dock/Launchpad icon launches the app window); optional service worker for offline shell (aligns with the on-device story — the whole app already runs offline once served). Note: install requires localhost or HTTPS — localhost qualifies, so no cert work needed for the single-machine product.
+  Verify: Chrome shows the install affordance; installed icon launches to the dashboard.
+  Evidence: _none_
+
 - [x] **T65 — Classify-only document types** (agent; MEDIUM, eval-gated)
   DoD: extend the type enum with classify-only types (`extract: false` in schema): 1099-DIV/-B/-R/-G, 1098-T/-E, 1095-A, property tax statement, charitable receipt, brokerage statement, W-9, engagement letter. These get classified + client-assigned + human-confirmed, zero field extraction — so the silent-wrong failure class cannot exist for them; they still satisfy checklist items. Risk register (recorded): larger enum = more force-fit surface (mitigation: UNRECOGNIZED discipline unchanged + mandatory confirm); new types eval-unverified (mitigation: small classify-only eval bucket, labeled UNVERIFIED until run).
   Verify: a classify-only doc classifies, assigns, confirms, and checks its checklist item; junk still lands UNRECOGNIZED; eval bucket run or explicitly deferred with the UNVERIFIED label.
