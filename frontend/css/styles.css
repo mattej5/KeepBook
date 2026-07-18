@@ -452,7 +452,27 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 .link-discard:hover { color: var(--red); }
 
 /* ---------- Checklist Dashboard ---------- */
-.client-grid { display: flex; flex-direction: column; gap: 22px; }
+/* Multi-column client grid: cards flow into as many ~400px columns as fit.
+   align-items:start keeps short cards from stretching to their row's tallest. */
+.client-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+  gap: 18px; align-items: start;
+}
+/* the dashboard earns a wider canvas than the reading-width views */
+main:has(#view-dashboard.active) { max-width: 1320px; }
+/* the create form reads better across the full row */
+.new-client-form { grid-column: 1 / -1; }
+/* FAB: the always-available "+ New client", pinned bottom-right over the
+   scrollable client grid */
+.fab {
+  position: fixed; right: 28px; bottom: 28px; z-index: 30;
+  width: 54px; height: 54px; border-radius: 999px; border: none; cursor: pointer;
+  background: var(--ink-blue); color: var(--card);
+  font-size: 28px; line-height: 1; font-weight: 600;
+  box-shadow: var(--shadow-card);
+  transition: background .15s, transform .15s;
+}
+.fab:hover { background: var(--ink-blue-dk); transform: translateY(-1px); }
 .client-card .card-pad { padding: 22px 26px 24px; }
 .client-name { font-family: var(--font-hand); font-size: 34px; font-weight: 600; line-height: 1; }
 .client-meta { font-size: 13px; color: var(--muted); margin: 4px 0 16px; }

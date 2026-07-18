@@ -739,9 +739,11 @@
           toast("Draft opened in your mail app");
         };
       });
-      // Quiet "+ New client" affordance at the end of the grid (ghost card that
-      // expands into an inline create form).
+      // "+ New client" lives on a FAB (always reachable however long the grid
+      // scrolls); the create form itself renders as a full-row card in the grid.
       appendNewClientCard();
+      var fab = $("fab-new-client");
+      if (fab) fab.onclick = openNewClientForm;
       // one-shot ink animations consumed on render
       state.justConfirmed = {};
     });
@@ -767,6 +769,9 @@
     // pruning this client never mutates the shared template).
     newClientState = { open: true, name: "", docs: ORGANIZER_TEMPLATE.slice(), error: "" };
     paintNewClientCard();
+    var card = $("new-client-card");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    var nameEl = $("nc-name"); if (nameEl) nameEl.focus();
   }
 
   function closeNewClientForm() {
@@ -811,12 +816,13 @@
     var card = $("new-client-card");
     if (!card) return;
     if (!newClientState.open) {
-      card.className = "card client-card new-client-ghost";
-      card.innerHTML = '<button class="nc-ghost-btn" id="nc-open">+ New client</button>';
-      var openBtn = $("nc-open");
-      if (openBtn) openBtn.onclick = openNewClientForm;
+      // Closed: nothing in the grid — the FAB is the affordance now.
+      card.hidden = true;
+      card.className = "";
+      card.innerHTML = "";
       return;
     }
+    card.hidden = false;
     card.className = "card client-card new-client-form";
     card.innerHTML = '<div class="card-pad">' +
       '<div class="nc-title">New client</div>' +
