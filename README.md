@@ -54,10 +54,11 @@ uvicorn main:app --port 8100
 
 # tests — run from repo root, scoped exactly like this
 # (a bare `pytest` fails collection on eval/run_test.py, which is an inference script, not a test)
-backend/.venv/bin/python -m pytest backend/tests eval/test_scoring.py eval/test_gen_forms.py
+backend/.venv/bin/python -m pytest backend/tests eval/test_scoring.py
 
 # eval (needs Ollama + models pulled)
 cd eval
+pip install -r requirements.txt   # eval extras: pymupdf, pillow, numpy
 python gen_w2.py
 python run_test.py gemma4:e4b   # single-doc kill test
 python run_eval.py --model gemma4:e4b --labels labels.json --docs ./testset/   # full eval
