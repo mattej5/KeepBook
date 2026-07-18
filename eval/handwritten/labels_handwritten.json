@@ -1,0 +1,29 @@
+{
+ "w2_hand_01_filled.png": {
+  "doc_type": "W-2",
+  "fields": {
+   "employee_name": "Priya N. Vasquez",
+   "ssn": "437-88-2210",
+   "employer": "Hollow Pine Outfitters",
+   "box1_wages": "54318.77",
+   "box2_fed_withheld": "6204.15"
+  }
+ },
+ "1099nec_hand_01_filled.png": {
+  "doc_type": "1099-NEC",
+  "fields": {
+   "recipient_name": "Omar T. Lindqvist",
+   "recipient_tin": "521-64-8837",
+   "payer": "Redrock Media Group",
+   "box1_nonemployee_comp": "19847.02"
+  }
+ },
+ "1098_hand_01_filled.png": {
+  "doc_type": "1098",
+  "fields": {
+   "borrower_name": "Celeste M. Okonkwo",
+   "lender": "Wasatch Home Lending",
+   "box1_mortgage_interest": "11932.60"
+  }
+ }
+}
