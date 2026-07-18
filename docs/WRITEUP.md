@@ -15,7 +15,7 @@ Vin pastes this into the Kaggle Writeup form and submits before **3:00 PM** (T51
 
 ### The problem
 
-Every filing season, small CPA firms and solo bookkeepers drown in intake. Dozens of clients, each owing a shifting set of documents (W-2s, 1099s, K-1s, mortgage statements), arriving as email attachments, phone photos, and paper. The work is pure repetitive classification, and there has been no safe way to automate it. A firm handling a stranger's SSN and wage history generally needs a signed data processing agreement with any processor touching that data. No such agreement exists for "the chat tab someone had open at 9 PM." So the numbers get retyped by hand, or client identities quietly leak into unvetted cloud tools.
+Every filing season, small CPA firms and solo bookkeepers drown in intake. Dozens of clients, each owing a shifting set of documents (W-2s, 1099s, K-1s, mortgage statements), arriving as email attachments, phone photos, and paper. The work is pure repetitive classification, and firms this size have had no safe way to automate it. A firm handling a stranger's SSN and wage history generally needs a signed data processing agreement with any processor touching that data. No such agreement exists for "the chat tab someone had open at 9 PM." So the numbers get retyped by hand, or client identities quietly leak into unvetted cloud tools.
 
 ### What we built
 
@@ -61,7 +61,7 @@ Results (`eval/results_final_*.json`, reproducible via `eval/run_eval.py`):
 | Silent wrong values | **21** | **8** | 36 |
 | Median latency | 17.7s | 28.2s | 13.0s |
 
-We track *silent wrong values* (present, well-formatted, incorrect) as a first-class metric because that's the failure class that actually hurts users. e2b produces nearly double e4b's silent wrongs at half the accuracy. That's the original kill test scaled to n=29. We also tested `gemma4:12b`. Its per-document vision latency blows past our 60-second serving envelope on 24GB hardware. So e4b beats both neighbors on the axes that matter.
+We track *silent wrong values* (present, incorrect, and indistinguishable from a right answer at a glance) as a first-class metric because that's the failure class that actually hurts users. e2b produces nearly double e4b's silent wrongs at half the accuracy. That's the original kill test scaled to n=29. We also tested `gemma4:12b`. Its per-document vision latency blows past our 60-second serving envelope on 24GB hardware. So e4b beats both neighbors on the axes that matter.
 
 **The eval drove the engineering, recursively.** Raw baseline was 43.6%. A conditional image-preprocessing pass (crop/deskew/illumination, byte-identical pass-through for clean scans, proven by hash) lifted the phone-photo bucket from 26% to 64% and shipped through a pre-declared gate. A region-crop extraction pass (per-field crops from known form layouts) reaches 92.5% with silent-wrongs cut to 8, but costs +10.5s/doc. It failed our interactive-latency gate, so it ships as an explicit "careful mode" (`REGION_PASS=1`) for batch use rather than a default. Two interventions were built, measured, and **rejected** by the same gates. Blind re-asking converted honest misses into well-formatted wrong answers, and the small-model cascade loses to model-swap costs. The negative results are in the repo alongside the wins.
 

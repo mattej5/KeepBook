@@ -83,7 +83,7 @@ Tested honestly with real pen-filled forms: the model reads handwriting at 58% o
 It would be, if we hid it. Instead it's the design input: extraction is fallible, so review is mandatory, corrections are one click, and the correction rate is on a screen. The economics still work — verifying a filled field is ~5x faster than retyping it, so even correcting a third of fields, the bookkeeper finishes far ahead of manual entry. And the alternative wasn't better AI, it was no AI at all.
 
 **"Who pays for this?"**
-The firm — per-seat, seasonal peak. The buyer is the person liable for the data: solo bookkeepers, small CPA firms. They can't use cloud AI at any price, so the alternative isn't a cheaper competitor — it's retyping.
+The firm — per-seat, seasonal peak. The buyer is the person liable for the data: solo bookkeepers, small CPA firms. For a firm this size the realistic cloud option is a consumer chat tab they can't take liability for — enterprise intake vendors with DPAs exist, but they're built and priced for firms with procurement teams. So the alternative isn't a cheaper competitor — it's retyping.
 
 **"Isn't this just a wrapper around Gemma?"**
 Gemma is the reader. The product is what surrounds it: binning, the per-client checklist, mandatory review with correction provenance (struck value preserved), the Unrecognized path, and an eval harness that measures the whole pipeline. Swap the model next year; the product remains.
