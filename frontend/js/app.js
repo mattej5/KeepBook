@@ -415,7 +415,16 @@
           var f = doc.fields[k];
           right += '<div class="field-row"><div class="field-label">' + esc(labelFor(k)) + '</div><div>';
           if (isTin(k)) {
-            right += '<div class="field-val tnum">' + esc(maskTin(f.value)) + '</div>';
+            // Highest-stakes field class — always masked on screen. Corrected:
+            // both sides masked (correctionHtml). Confirmed-clean: masked static.
+            // Unconfirmed: masked with a pen-icon "edit" → cleartext input.
+            if (confirmed && f.corrected) {
+              right += correctionHtml(k, f);
+            } else if (confirmed) {
+              right += '<div class="field-val tnum">' + esc(maskTin(f.value)) + '</div>';
+            } else {
+              right += tinEditHtml(k, f);
+            }
           } else if (confirmed && f.corrected) {
             right += correctionHtml(k, f);
           } else if (confirmed) {
@@ -477,6 +486,34 @@
         });
         refreshConfirmState(doc);
       }
+      // TIN/SSN edit toggle: pen link reveals the cleartext input (focus+select),
+      // "done" or Esc collapses back to masked, re-masking to the current value.
+      el.querySelectorAll("[data-tin-edit]").forEach(function (btn) {
+        btn.onclick = function () {
+          var wrap = btn.closest(".tin-field"); if (!wrap) return;
+          wrap.querySelector(".tin-masked").hidden = true;
+          var box = wrap.querySelector(".tin-edit"); box.hidden = false;
+          var inp = box.querySelector("input"); if (inp) { inp.focus(); inp.select(); }
+        };
+      });
+      el.querySelectorAll("[data-tin-done]").forEach(function (btn) {
+        btn.onclick = function () {
+          var wrap = btn.closest(".tin-field"); if (!wrap) return;
+          var inp = wrap.querySelector(".tin-edit input");
+          var disp = wrap.querySelector(".tin-masked .field-val");
+          if (disp && inp) disp.textContent = maskTin(inp.value);
+          wrap.querySelector(".tin-edit").hidden = true;
+          wrap.querySelector(".tin-masked").hidden = false;
+        };
+      });
+      el.querySelectorAll(".tin-edit input").forEach(function (inp) {
+        inp.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            var done = inp.closest(".tin-field").querySelector("[data-tin-done]");
+            if (done) done.click();
+          }
+        });
+      });
       // lazy-load the model trace the first time the disclosure is opened
       var det = el.querySelector(".trace-disclosure");
       if (det) det.addEventListener("toggle", function () {
@@ -511,11 +548,43 @@
   }
 
   function correctionHtml(k, f) {
-    var oldV = isMoney(k) ? money(f.original_value) : f.original_value;
-    var newV = isMoney(k) ? money(f.value) : f.value;
+    var tin = isTin(k);
+    // TIN keys: mask BOTH the struck original and the ink-blue corrected value.
+    // The provenance ("a digit was fixed") still shows, but two SSNs never sit on
+    // screen at once — the whole point of the privacy story.
+    var oldV = tin ? maskTin(f.original_value) : (isMoney(k) ? money(f.original_value) : f.original_value);
+    var newV = tin ? maskTin(f.value) : (isMoney(k) ? money(f.value) : f.value);
     return '<div class="correction"><span class="old tnum">' + esc(oldV) + '</span>' +
       '<span class="new tnum">' + esc(newV) + '</span>' +
       '<span class="pen-note">corrected</span></div>';
+  }
+
+  // TIN/SSN/EIN editor for UNCONFIRMED docs. Masked by default with a quiet pen
+  // "edit" link; activating it reveals a CLEARTEXT input pre-filled with the true
+  // value. Cleartext while actively editing is deliberate — the reviewer is reading
+  // the number straight off the source image to fix a wrong digit and has to see
+  // the digits to do it; the masked display is what sits on screen the rest of the
+  // time. The input carries data-field like every other field, so doConfirm collects
+  // it with zero special-casing (a value left untouched submits unchanged → not a
+  // correction). The low-confidence flag renders in BOTH the masked and edit states.
+  function tinEditHtml(k, f) {
+    var lc = f.low_confidence ? " lowconf" : "";
+    var note = f.low_confidence ? '<div class="lowconf-note">low confidence — check the photo</div>' : "";
+    var pen = '<svg class="pen-ico" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">' +
+      '<path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.83-2.83L5 17v3z" fill="none" stroke="currentColor" ' +
+      'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<div class="tin-field" data-tin="' + esc(k) + '">' +
+      '<div class="tin-masked">' +
+        '<span class="field-val tnum">' + esc(maskTin(f.value)) + '</span>' +
+        '<button type="button" class="tin-edit-link" data-tin-edit="' + esc(k) + '">' + pen + 'edit</button>' +
+        note +
+      '</div>' +
+      '<div class="tin-edit" hidden>' +
+        '<input class="field-input tnum' + lc + '" data-field="' + esc(k) + '" value="' + esc(f.value) + '">' +
+        '<button type="button" class="tin-done-link" data-tin-done="' + esc(k) + '">done</button>' +
+        note +
+      '</div>' +
+    '</div>';
   }
 
   function doConfirm(doc) {
