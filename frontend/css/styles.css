@@ -188,6 +188,16 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 .btn-ghost:hover { background: #2f5fd012; }
 .btn-sm { padding: 8px 18px; font-size: 13px; }
 
+/* Keyboard focus: consistent ink-blue ring on controls that had none.
+   :focus-visible only matches keyboard focus, so mouse clicks show nothing. */
+.btn:focus-visible,
+.btn-ghost:focus-visible,
+.nav button:focus-visible,
+.reset-link:focus-visible {
+  outline: 2px solid var(--ink-blue);
+  outline-offset: 2px;
+}
+
 /* ---------- Bin Review ---------- */
 .review-layout { display: grid; grid-template-columns: 240px 1fr; gap: 20px; }
 .review-list { display: flex; flex-direction: column; gap: 10px; }
