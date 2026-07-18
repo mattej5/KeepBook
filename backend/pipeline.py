@@ -71,9 +71,16 @@ FIELD_SCHEMA = {
 
 # ---------------------------------------------------------------------------
 # Model-call strategies (env-flagged, independently toggleable)
-#   RE_ASK=1 (default ON) -> after extraction, one focused follow-up per
+#   RE_ASK=1 (default OFF) -> after extraction, one focused follow-up per
 #               empty/malformed field (fill-only, never overwrites a value that
 #               already passes its format check). Cap REASK_CAP calls per doc.
+#               Default OFF per the A/B gate (eval/results_e4b_tools.json vs
+#               eval/results.json): field accuracy rose 41->44 but 4 empty
+#               fields came back as well-formed WRONG values (silent-wrongs
+#               23->27) and median latency rose ~5s. All 4 bad fills were
+#               free-text name fields, where field_format_ok accepts any
+#               non-empty string, so the acceptance gate has no teeth there.
+#               The never-overwrite guard itself held: zero correct->wrong.
 #   CASCADE=1 (default OFF) -> classify on the small model
 #               (CASCADE_CLASSIFY_MODEL), extract on MODEL_NAME. A small-model
 #               UNRECOGNIZED is confirmed on the extraction model before the
@@ -392,7 +399,7 @@ def run_pipeline(image_b64: str) -> dict:
             "re_asks": 0,
         }
     n_reasks = 0
-    if _flag("RE_ASK"):
+    if _flag("RE_ASK", "0"):
         fields, n_reasks = apply_reask(image_b64, doc_type, fields)
     return {
         "status": "extracted",
