@@ -100,11 +100,12 @@ Deliberately small stack — **two languages total** (Python + JS/TS) given the 
 
 | Artifact | Language / tooling | Responsibility |
 |---|---|---|
-| Backend | Python / FastAPI | Intake queue, classification + extraction calls to the local model, binning logic, checklist state, correction persistence. |
-| Capture UI | Plain HTML/CSS/JS, static, no build step | Phone-first document submission. Deployed on Vercel. |
-| Bin-review + checklist dashboard | Same JS/TS stack as capture UI | Reviewer corrects extractions; per-client checklist view. Deployed alongside the capture UI. |
-| Cloudflare Tunnel | `cloudflared` (config, not code) | Bridges the Vercel-hosted HTTPS UI to the Mac backend over HTTPS on both ends. Needed because an HTTPS page cannot POST to a plain-HTTP local address — the browser blocks it as mixed content. The tunnel gives the local backend an HTTPS endpoint. |
-| Eval harness | Python | Extends the kill-test scripts already in the scratchpad (`gen_w2.py`, `run_test.py`). Scores doc-type and per-field accuracy over a hand-labeled test set. |
+| Backend | Python / FastAPI | Intake queue, classification + extraction calls to the local model (via the §8 runtime adapter), binning logic, checklist state, correction persistence. **Also serves the frontend as static files** — the whole product runs from `localhost`, no hosting dependency. |
+| Capture UI | Plain HTML/CSS/JS, static, no build step | Document submission (folder/file drop). Served locally by the backend. |
+| Bin-review + checklist dashboard | Same plain-JS stack | Reviewer corrects extractions; per-client checklist view. Served locally by the backend. |
+| Eval harness | Python | Extends the kill-test scripts (`eval/gen_w2.py`, `eval/run_test.py`). Scores doc-type and per-field accuracy over the labeled test set in `eval/testset/`. |
+
+**Cut from the critical path (deliberate):** the Vercel-hosted UI + Cloudflare Tunnel existed only to serve the phone-capture stretch feature (an HTTPS page can't POST to a plain-HTTP local address). With phone capture cut to stretch (§6), the demo has **zero network dependency** — everything, UI included, serves from the Mac. This is also the demo's on-device proof: the full flow runs with Wi-Fi off (see docs/TASKS.md T40). If phone capture is revived, the tunnel comes back with it.
 
 INFERRED: the two-language constraint keeps context-switching and integration surface low, which is the right trade for a sub-24-hour build. The static no-build frontend also removes an entire class of deploy failures.
 
