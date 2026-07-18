@@ -164,5 +164,273 @@
     "image_path": "mock/images/doc_007_receipt.png",
     "received_at": "2026-07-18T07:47:00Z",
     "fields": {}
+  },
+  {
+    "id": "doc_007",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "W-2 — Solstice Health Partners",
+    "image_path": "mock/images/doc_007_w2.png",
+    "received_at": "2026-07-18T06:05:00Z",
+    "fields": {
+      "employer": {"value": "Solstice Health Partners", "corrected": false},
+      "ein": {"value": "22-3390481", "corrected": false},
+      "employee_name": {"value": "Priya R. Nandakumar", "corrected": false},
+      "ssn": {"value": "601-47-2895", "corrected": false},
+      "box1_wages": {"value": "88,410.32", "corrected": false},
+      "box2_fed_withheld": {"value": "11,204.60", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_008",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "W-2 — Meridian Retail Group",
+    "image_path": "mock/images/doc_008_w2.png",
+    "received_at": "2026-07-18T06:08:00Z",
+    "fields": {
+      "employer": {"value": "Meridian Retail Group", "corrected": false},
+      "ein": {"value": "84-6620193", "corrected": false},
+      "employee_name": {"value": "Priya R. Nandakumar", "corrected": false},
+      "ssn": {"value": "601-47-2895", "corrected": false},
+      "box1_wages": {"value": "22,150.00", "corrected": false},
+      "box2_fed_withheld": {"value": "1,884.75", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_009",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "1099-NEC — Bramwell Design Studio",
+    "image_path": "mock/images/doc_009_1099nec.png",
+    "received_at": "2026-07-18T06:12:00Z",
+    "fields": {
+      "payer": {"value": "Bramwell Design Studio", "corrected": false},
+      "recipient": {"value": "Priya R. Nandakumar", "corrected": false},
+      "recipient_tin": {"value": "601-47-2895", "corrected": false},
+      "box1_nonemployee_comp": {"value": "9,600.00", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_010",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "1099-NEC — Ridgeline Consulting",
+    "image_path": "mock/images/doc_010_1099nec.png",
+    "received_at": "2026-07-18T06:15:00Z",
+    "fields": {
+      "payer": {"value": "Ridgeline Consulting", "corrected": false},
+      "recipient": {"value": "Priya R. Nandakumar", "corrected": false},
+      "recipient_tin": {"value": "601-47-2895", "corrected": false},
+      "box1_nonemployee_comp": {"value": "4,250.00", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_011",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "1099-INT — Anchor Trust Bank",
+    "image_path": "mock/images/doc_011_1099int.png",
+    "received_at": "2026-07-18T06:20:00Z",
+    "fields": {
+      "payer": {"value": "Anchor Trust Bank", "corrected": false},
+      "recipient": {"value": "Priya R. Nandakumar", "corrected": false},
+      "recipient_tin": {"value": "601-47-2895", "corrected": false},
+      "box1_interest": {"value": "612.44", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_012",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "1099-INT — Fernwood Credit Union",
+    "image_path": "mock/images/doc_012_1099int.png",
+    "received_at": "2026-07-18T06:24:00Z",
+    "fields": {
+      "payer": {"value": "Fernwood Credit Union", "corrected": false},
+      "recipient": {"value": "Priya R. Nandakumar", "corrected": false},
+      "recipient_tin": {"value": "601-47-2895", "corrected": false},
+      "box1_interest": {"value": "148.09", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_013",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "1098 — Union Trust Bank",
+    "image_path": "mock/images/doc_013_1098.png",
+    "received_at": "2026-07-18T06:30:00Z",
+    "fields": {
+      "lender": {"value": "Union Trust Bank", "corrected": false},
+      "borrower": {"value": "Priya R. Nandakumar", "corrected": false},
+      "borrower_tin": {"value": "601-47-2895", "corrected": false},
+      "box1_mortgage_interest": {"value": "14,320.77", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_014",
+    "client_id": "client_priya",
+    "status": "confirmed",
+    "doc_type": "K-1 — Hollow Creek Ventures LP",
+    "image_path": "mock/images/doc_014_k1.png",
+    "received_at": "2026-07-18T06:35:00Z",
+    "fields": {
+      "partnership_name": {"value": "Hollow Creek Ventures LP", "corrected": false},
+      "partner_name": {"value": "Priya R. Nandakumar", "corrected": false},
+      "partnership_ein": {"value": "47-1029384", "corrected": false},
+      "ordinary_income": {"value": "31,884.20", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_015",
+    "client_id": "client_whitmore_cole",
+    "status": "confirmed",
+    "doc_type": "K-1 — Rosalind Whitmore",
+    "image_path": "mock/images/doc_015_k1.png",
+    "received_at": "2026-07-18T07:00:00Z",
+    "fields": {
+      "partnership_name": {"value": "Whitmore & Cole LLP", "corrected": false},
+      "partner_name": {"value": "Rosalind Whitmore", "corrected": false},
+      "partnership_ein": {"value": "58-2091743", "corrected": false},
+      "ordinary_income": {"value": "142,880.55", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_016",
+    "client_id": "client_whitmore_cole",
+    "status": "confirmed",
+    "doc_type": "K-1 — Desmond Cole",
+    "image_path": "mock/images/doc_016_k1.png",
+    "received_at": "2026-07-18T07:04:00Z",
+    "fields": {
+      "partnership_name": {"value": "Whitmore & Cole LLP", "corrected": false},
+      "partner_name": {"value": "Desmond Cole", "corrected": false},
+      "partnership_ein": {"value": "58-2091743", "corrected": false},
+      "ordinary_income": {"value": "138,420.10", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_017",
+    "client_id": "client_whitmore_cole",
+    "status": "confirmed",
+    "doc_type": "1099-NEC — Ledger Point Bookkeeping",
+    "image_path": "mock/images/doc_017_1099nec.png",
+    "received_at": "2026-07-18T07:08:00Z",
+    "fields": {
+      "payer": {"value": "Ledger Point Bookkeeping", "corrected": false},
+      "recipient": {"value": "Whitmore & Cole LLP", "corrected": false},
+      "recipient_tin": {"value": "58-2091743", "corrected": false},
+      "box1_nonemployee_comp": {"value": "18,600.00", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_018",
+    "client_id": "client_whitmore_cole",
+    "status": "confirmed",
+    "doc_type": "1099-NEC — Vantage Legal Group",
+    "image_path": "mock/images/doc_018_1099nec.png",
+    "received_at": "2026-07-18T07:12:00Z",
+    "fields": {
+      "payer": {"value": "Vantage Legal Group", "corrected": false},
+      "recipient": {"value": "Whitmore & Cole LLP", "corrected": false},
+      "recipient_tin": {"value": "58-2091743", "corrected": false},
+      "box1_nonemployee_comp": {"value": "9,750.00", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_019",
+    "client_id": "client_whitmore_cole",
+    "status": "confirmed",
+    "doc_type": "1099-INT — Cascade Federal Bank",
+    "image_path": "mock/images/doc_019_1099int.png",
+    "received_at": "2026-07-18T07:16:00Z",
+    "fields": {
+      "payer": {"value": "Cascade Federal Bank", "corrected": false},
+      "recipient": {"value": "Whitmore & Cole LLP", "corrected": false},
+      "recipient_tin": {"value": "58-2091743", "corrected": false},
+      "box1_interest": {"value": "2,204.88", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_020",
+    "client_id": "client_alvarez_trust",
+    "status": "confirmed",
+    "doc_type": "1099-INT — Union Trust Bank",
+    "image_path": "mock/images/doc_020_1099int.png",
+    "received_at": "2026-07-18T07:40:00Z",
+    "fields": {
+      "payer": {"value": "Union Trust Bank", "corrected": false},
+      "recipient": {"value": "The Alvarez Family Trust", "corrected": false},
+      "recipient_tin": {"value": "62-7734910", "corrected": false},
+      "box1_interest": {"value": "3,410.62", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_021",
+    "client_id": "client_alvarez_trust",
+    "status": "confirmed",
+    "doc_type": "K-1 — Sunridge Holdings LP",
+    "image_path": "mock/images/doc_021_k1.png",
+    "received_at": "2026-07-18T07:44:00Z",
+    "fields": {
+      "partnership_name": {"value": "Sunridge Holdings LP", "corrected": false},
+      "partner_name": {"value": "The Alvarez Family Trust", "corrected": false},
+      "partnership_ein": {"value": "62-7734910", "corrected": false},
+      "ordinary_income": {"value": "54,700.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_022",
+    "client_id": "client_elena",
+    "status": "confirmed",
+    "doc_type": "W-2 — Anchor Freight Systems",
+    "image_path": "mock/images/doc_022_w2.png",
+    "received_at": "2026-07-18T08:00:00Z",
+    "fields": {
+      "employer": {"value": "Anchor Freight Systems", "corrected": false},
+      "ein": {"value": "71-9048223", "corrected": false},
+      "employee_name": {"value": "Elena Marchetti-Reyes", "corrected": false},
+      "ssn": {"value": "339-58-6602", "corrected": false},
+      "box1_wages": {"value": "61,205.40", "corrected": false},
+      "box2_fed_withheld": {"value": "6,984.12", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_023",
+    "client_id": "client_elena",
+    "status": "confirmed",
+    "doc_type": "1099-INT — Meridian Bank & Trust",
+    "image_path": "mock/images/doc_023_1099int.png",
+    "received_at": "2026-07-18T08:05:00Z",
+    "fields": {
+      "payer": {"value": "Meridian Bank & Trust", "corrected": false},
+      "recipient": {"value": "Elena Marchetti-Reyes", "corrected": false},
+      "recipient_tin": {"value": "339-58-6602", "corrected": false},
+      "box1_interest": {"value": "275.30", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
+  },
+  {
+    "id": "doc_024",
+    "client_id": "client_elena",
+    "status": "confirmed",
+    "doc_type": "1099-NEC — Solstice Creative Co",
+    "image_path": "mock/images/doc_024_1099nec.png",
+    "received_at": "2026-07-18T08:10:00Z",
+    "fields": {
+      "payer": {"value": "Solstice Creative Co", "corrected": false},
+      "recipient": {"value": "Elena Marchetti-Reyes", "corrected": false},
+      "recipient_tin": {"value": "339-58-6602", "corrected": false},
+      "box1_nonemployee_comp": {"value": "5,800.00", "corrected": false},
+      "box4_fed_withheld": {"value": "0.00", "corrected": false}
+    }
   }
 ]

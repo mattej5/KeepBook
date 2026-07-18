@@ -69,7 +69,8 @@
 
     // What the shipped fixtures contribute to live stats — used to overlay
     // live deltas (demo-time corrections) onto the timeline fixture's 24h story.
-    var BASELINE = { fields_extracted: 26, fields_corrected: 1, low_confidence: 2, docs: 6,
+    // (T64: recomputed after richer mock/documents.json — 24 docs, 114 fields.)
+    var BASELINE = { fields_extracted: 114, fields_corrected: 1, low_confidence: 2, docs: 24,
                      categories: { money: 1, tin_ssn: 0, names: 0 } };
 
     function loadFixtures() {

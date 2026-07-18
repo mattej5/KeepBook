@@ -16,5 +16,96 @@
     "name": "Chen Partnership",
     "expected_docs": ["1099-NEC", "K-1", "1098"],
     "received_docs": ["1099-NEC"]
+  },
+  {
+    "id": "client_priya",
+    "name": "Priya Nandakumar",
+    "expected_docs": [
+      "W-2 — Solstice Health Partners",
+      "W-2 — Meridian Retail Group",
+      "1099-NEC — Bramwell Design Studio",
+      "1099-NEC — Ridgeline Consulting",
+      "1099-INT — Anchor Trust Bank",
+      "1099-INT — Fernwood Credit Union",
+      "1098 — Union Trust Bank",
+      "K-1 — Hollow Creek Ventures LP",
+      "1099-MISC — Fieldstone Rentals"
+    ],
+    "received_docs": [
+      "W-2 — Solstice Health Partners",
+      "W-2 — Meridian Retail Group",
+      "1099-NEC — Bramwell Design Studio",
+      "1099-NEC — Ridgeline Consulting",
+      "1099-INT — Anchor Trust Bank",
+      "1099-INT — Fernwood Credit Union",
+      "1098 — Union Trust Bank",
+      "K-1 — Hollow Creek Ventures LP"
+    ]
+  },
+  {
+    "id": "client_dmitri",
+    "name": "Dmitri Volkov",
+    "expected_docs": [
+      "W-2 — Brightline Freight Co.",
+      "1099-NEC — Solace Creative LLC",
+      "1099-INT — Cascade Federal Bank",
+      "1098 — Meridian Bank & Trust"
+    ],
+    "received_docs": []
+  },
+  {
+    "id": "client_whitmore_cole",
+    "name": "Whitmore & Cole LLP",
+    "expected_docs": [
+      "K-1 — Rosalind Whitmore",
+      "K-1 — Desmond Cole",
+      "K-1 — Imani Whitmore-Cole",
+      "1099-NEC — Ledger Point Bookkeeping",
+      "1099-NEC — Vantage Legal Group",
+      "1099-NEC — Northgate Supplies",
+      "1099-INT — Cascade Federal Bank",
+      "1098 — Union Trust Bank",
+      "1099-MISC — Harborview Properties",
+      "Charitable receipts"
+    ],
+    "received_docs": [
+      "K-1 — Rosalind Whitmore",
+      "K-1 — Desmond Cole",
+      "1099-NEC — Ledger Point Bookkeeping",
+      "1099-NEC — Vantage Legal Group",
+      "1099-INT — Cascade Federal Bank"
+    ]
+  },
+  {
+    "id": "client_alvarez_trust",
+    "name": "The Alvarez Family Trust",
+    "expected_docs": [
+      "1099-INT — Union Trust Bank",
+      "K-1 — Sunridge Holdings LP",
+      "1098 — Copperline Bank",
+      "1099-MISC — Fieldstone Rentals",
+      "Charitable receipts"
+    ],
+    "received_docs": [
+      "1099-INT — Union Trust Bank",
+      "K-1 — Sunridge Holdings LP"
+    ]
+  },
+  {
+    "id": "client_elena",
+    "name": "Elena Marchetti-Reyes",
+    "expected_docs": [
+      "W-2 — Anchor Freight Systems",
+      "1099-INT — Meridian Bank & Trust",
+      "1099-NEC — Solstice Creative Co",
+      "1098 — Copperline Bank",
+      "1099-MISC — Fieldstone Rentals",
+      "Charitable receipts"
+    ],
+    "received_docs": [
+      "W-2 — Anchor Freight Systems",
+      "1099-INT — Meridian Bank & Trust",
+      "1099-NEC — Solstice Creative Co"
+    ]
   }
 ]

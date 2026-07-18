@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Restore KeepBook's backend to a known demo state (T42/T43).
+# Restore KeepBook's backend to a known demo state (T42/T43/T64).
 #
-# Usage: scripts/demo_state.sh seed|fallback
+# Usage: scripts/demo_state.sh seed|fallback|big
 #
 #   seed     -> backend/state.demo.json     (Ruth Okafor one confirm from
 #               complete, Marcus Whitfield missing 1099-INT, Chen Partnership
 #               missing K-1 + 1098 entirely — see docs/USER-JOURNEY.md)
 #   fallback -> backend/state.fallback.json (same session fully processed,
 #               for instant recovery if live processing stalls on stage)
+#   big      -> backend/state.demo-big.json (T64: 8 clients incl. the 3
+#               journey clients above at their canonical seed states, plus 5
+#               richer clients with long 8-10 item checklists, varied
+#               completion — for a fuller-looking dashboard on demand)
 #
 # main.py only loads state.json at startup (backend/main.py _load_state(),
 # called from the FastAPI "startup" event) — there is no hot-reload endpoint.
@@ -18,8 +22,8 @@
 set -euo pipefail
 
 MODE="${1:-}"
-if [[ "$MODE" != "seed" && "$MODE" != "fallback" ]]; then
-  echo "usage: $0 seed|fallback" >&2
+if [[ "$MODE" != "seed" && "$MODE" != "fallback" && "$MODE" != "big" ]]; then
+  echo "usage: $0 seed|fallback|big" >&2
   exit 1
 fi
 
@@ -33,6 +37,7 @@ PORT=8100
 case "$MODE" in
   seed)     SRC_STATE="$BACKEND_DIR/state.demo.json" ;;
   fallback) SRC_STATE="$BACKEND_DIR/state.fallback.json" ;;
+  big)      SRC_STATE="$BACKEND_DIR/state.demo-big.json" ;;
 esac
 
 if [[ ! -f "$SRC_STATE" ]]; then
@@ -52,6 +57,24 @@ doc_004:w2_test.png
 doc_005:testset/receipt_01.png
 doc_006:testset/1099int_clean_02.png
 doc_007:testset/k1_clean_01.png
+doc_101:testset/w2_clean_01.png
+doc_102:testset/w2_photo_01.png
+doc_103:testset/1099nec_clean_01.png
+doc_104:testset/1099nec_clean_02.png
+doc_105:testset/1099int_photo_01.png
+doc_106:testset/1099int_photo_02.png
+doc_107:testset/1098_clean_02.png
+doc_108:testset/k1_clean_02.png
+doc_109:testset/k1_photo_01.png
+doc_110:testset/k1_photo_02.png
+doc_111:testset/1099nec_clean_03.png
+doc_112:testset/1099nec_photo_01.png
+doc_113:testset/1099int_clean_02.png
+doc_114:testset/1099int_clean_02.png
+doc_115:testset/k1_clean_01.png
+doc_116:testset/w2_photo_02.png
+doc_117:testset/1099int_photo_01.png
+doc_118:testset/1099nec_photo_02.png
 "
 
 echo "staging images into $UPLOADS_DIR ..."
