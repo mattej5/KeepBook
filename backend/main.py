@@ -246,12 +246,26 @@ def _worker_step() -> None:
     orig_extract = pipeline.model_extract
 
     def _capturing_extract(image_b64, prompt, *args, **kwargs):
+        # Stage label for this call. There are no tool calls and no chain-of-
+        # thought here, so the truthful trace unit is the pipeline STAGE that
+        # issued the call; the pipeline publishes it in pipeline._capture_stage
+        # right before calling. Snapshot it now (synchronous, single worker).
+        cap = getattr(pipeline, "_capture_stage", None) or {}
+        stage = cap.get("stage")
+        retry_call = bool(cap.get("retry"))
+        entry = {"seq": len(calls) + 1, "prompt": prompt}
+        if stage is not None:
+            entry["stage"] = stage
+        if retry_call:
+            entry["retry"] = True
         try:
             resp = orig_extract(image_b64, prompt, *args, **kwargs)
         except Exception as exc:
-            calls.append({"seq": len(calls) + 1, "prompt": prompt, "error": str(exc)})
+            entry["error"] = str(exc)
+            calls.append(entry)
             raise
-        calls.append({"seq": len(calls) + 1, "prompt": prompt, "response": resp})
+        entry["response"] = resp
+        calls.append(entry)
         return resp
 
     pipeline.model_extract = _capturing_extract
@@ -911,6 +925,83 @@ async def stats_timeline(hours: int = 24):
         "corrections_by_category": by_cat,
     }
     return {"hours": hours, "buckets": bucket_list, "totals": totals}
+
+
+# ----------------------- Runs (cross-run trace surface) --------------------
+def _read_run_raws(raw_ref):
+    """Load a raws/<id>.json trace by its event-recorded ref. Returns the parsed
+    record or None (missing ref, missing/corrupt file — the seeded-state edge
+    case). Best-effort: observability must never fail over IO."""
+    if not raw_ref:
+        return None
+    path = os.path.join(BASE_DIR, str(raw_ref))
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def _stage_summary(calls):
+    """Per-call stage labels for a run, in call order. Falls back to "call N"
+    for any call written before stage labels existed (old raws)."""
+    summary = []
+    for i, c in enumerate(calls or []):
+        stage = c.get("stage")
+        summary.append(stage if stage else "call " + str(c.get("seq", i + 1)))
+    return summary
+
+
+@app.get("/runs")
+async def get_runs(limit: int = 20):
+    """Recent processed documents, newest first — the cross-run trace surface.
+
+    One row per processed doc (extracted / unrecognized events), enriched from
+    the raws/<id>.json trace when it is on disk. Seeded/older docs have no raws
+    file: those rows report raw_available=false with a null call_count and empty
+    stages, and still render. Model output itself is served per-doc by the
+    existing GET /documents/<id>/trace; this endpoint is the index over it.
+    """
+    n = max(1, min(int(limit), 100))
+    processed = [
+        e for e in _read_events() if e.get("type") in ("extracted", "unrecognized")
+    ]
+    # Events are appended in processing order (chronological), so reverse gives
+    # newest-first — the true order docs were handled, not a 1s-resolution ts sort.
+    processed.reverse()
+
+    runs = []
+    for e in processed[:n]:
+        raws = _read_run_raws(e.get("raw_ref"))
+        if raws is not None:
+            calls = raws.get("calls") or []
+            model_runtime = raws.get("model_runtime")
+            call_count = len(calls)
+            stages = _stage_summary(calls)
+            raw_available = True
+        else:
+            # No trace on disk (seeded/older doc). We don't know the call count
+            # or per-call stages; the event still carries the run's headline.
+            model_runtime = os.environ.get("MODEL_RUNTIME", "ollama")
+            call_count = None
+            stages = []
+            raw_available = False
+        runs.append({
+            "doc_id": e.get("doc_id"),
+            "doc_type": e.get("doc_type"),
+            "status": e.get("type"),
+            "model_runtime": model_runtime,
+            "model_name": e.get("model"),
+            "latency_s": e.get("latency_s"),
+            "preprocessed": e.get("preprocessed"),
+            "retried": bool(e.get("retried", False)),
+            "call_count": call_count,
+            "stages": stages,
+            "raw_available": raw_available,
+        })
+    return {"runs": runs}
 
 
 # --------------------- Static frontend (mount LAST) ------------------------

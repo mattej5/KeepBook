@@ -23,6 +23,31 @@ from model_runtime import extract as model_extract
 
 
 # ---------------------------------------------------------------------------
+# Observability: pipeline-STAGE labels for the raw-I/O capture.
+# ---------------------------------------------------------------------------
+# This pipeline has no tool calls, and Gemma emits no chain-of-thought, so the
+# truthful granularity of a "trace" is the pipeline STAGE that issued each model
+# call (classify / extract / region:<field> / ensemble:<model> / reask:<field>)
+# and whether that particular call was the strict-JSON retry. We publish the
+# stage of the *next* model_extract call in this module-level marker; the raw-
+# capture wrapper in backend/main.py snapshots it when it records the call.
+#
+# Deliberately NOT passed as a model_extract argument: the adapter call signature
+# stays `model_extract(image_b64, prompt, model=...)` so the real adapter and the
+# fixed-signature test fakes that patch model_extract are untouched (additive).
+# The worker is the only sequential model caller, so this single marker is race-
+# free: the pipeline sets it immediately before each call and the wrapper reads
+# it synchronously in the same thread.
+_capture_stage = {"stage": None, "retry": False}
+
+
+def _mark_stage(stage, retry=False):
+    """Publish the stage/retry of the next model_extract call for the capturer."""
+    _capture_stage["stage"] = stage
+    _capture_stage["retry"] = bool(retry)
+
+
+# ---------------------------------------------------------------------------
 # Optional intake preprocessing (backend/preprocess.py).
 # Enabled by default; PREPROCESS=0 disables it (the A/B "off" arm). Runs on the
 # raw image bytes before the model ever sees them: document-region crop,
@@ -416,15 +441,20 @@ def normalize_doc_type(raw) -> str:
 # ---------------------------------------------------------------------------
 # Model calls with one retry
 # ---------------------------------------------------------------------------
-def _call_and_parse(image_b64: str, prompt: str, model: str = None):
+def _call_and_parse(image_b64: str, prompt: str, model: str = None, stage: str = None):
     """Call the model, parse JSON, retry once on unparseable output.
 
     Returns (parsed_dict_or_None, raw_text_of_last_attempt, retried_bool).
+
+    `stage` is a trace label only (published to the raw capturer); it never
+    reaches the adapter, so the call signature is unchanged.
     """
+    _mark_stage(stage, retry=False)
     raw = model_extract(image_b64, prompt, model=model)
     parsed = parse_json(raw)
     if parsed is not None:
         return parsed, raw, False
+    _mark_stage(stage, retry=True)  # the strict-JSON retry
     raw2 = model_extract(image_b64, prompt, model=model)
     parsed2 = parse_json(raw2)
     return parsed2, raw2, True
@@ -450,7 +480,9 @@ def classify(image_b64: str, model: str = None):
     JSON key). Defaults False when absent/unparseable — the ensemble path only
     activates on a positive signal, so a missing key fails safe to normal intake.
     """
-    parsed, raw, retried = _call_and_parse(image_b64, build_classify_prompt(), model=model)
+    parsed, raw, retried = _call_and_parse(
+        image_b64, build_classify_prompt(), model=model, stage="classify"
+    )
     if parsed is None:
         return UNRECOGNIZED, False, raw, retried
     return (
@@ -476,10 +508,14 @@ def classify_cascade(image_b64: str):
     return dt, hand, raw, retried
 
 
-def extract_fields(image_b64: str, doc_type: str, model: str = None):
-    """Return (fields_dict_or_None, raw, retried). fields keyed per FIELD_SCHEMA."""
+def extract_fields(image_b64: str, doc_type: str, model: str = None, stage: str = "extract"):
+    """Return (fields_dict_or_None, raw, retried). fields keyed per FIELD_SCHEMA.
+
+    `stage` labels the call for the trace: the primary extraction pass is
+    "extract"; the HAND_ENSEMBLE cross-check passes "ensemble:<model>".
+    """
     parsed, raw, retried = _call_and_parse(
-        image_b64, build_extract_prompt(doc_type), model=model
+        image_b64, build_extract_prompt(doc_type), model=model, stage=stage
     )
     if parsed is None:
         return None, raw, retried
@@ -511,6 +547,7 @@ def apply_reask(image_b64: str, doc_type: str, fields: dict, model: str = None):
         if field_format_ok(key, updated.get(key, "")):
             continue  # already well-formed -> never re-ask / never overwrite
         n += 1
+        _mark_stage("reask:" + key)
         raw = model_extract(image_b64, build_reask_prompt(doc_type, key), model=model)
         parsed = parse_json(raw)
         if not parsed:
@@ -562,6 +599,7 @@ def apply_region_pass(image_b64: str, doc_type: str, fields: dict, model: str = 
         if crop_b64 is None:
             continue
         n += 1
+        _mark_stage("region:" + key)
         raw = model_extract(crop_b64, build_region_prompt(doc_type, key), model=model)
         parsed = parse_json(raw)
         if not parsed:
@@ -624,7 +662,9 @@ def apply_hand_ensemble(image_b64: str, doc_type: str, fields: dict, model_small
 
     Returns (disputed_map, {"agreed": n, "disputed": n}).
     """
-    e2b_fields, _raw, _retried = extract_fields(image_b64, doc_type, model=model_small)
+    e2b_fields, _raw, _retried = extract_fields(
+        image_b64, doc_type, model=model_small, stage="ensemble:" + str(model_small)
+    )
     e2b_fields = e2b_fields or {}
     disputed = {}
     for key in FIELD_SCHEMA[doc_type]:
