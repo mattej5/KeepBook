@@ -198,6 +198,7 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 }
 .rl-badge.needs { background: var(--highlighter-soft); color: #7a5b00; }
 .rl-badge.unrec { background: #ececec; color: var(--muted); }
+.rl-badge.error { background: #fbe6e2; color: var(--red); }
 .rl-empty { font-size: 13px; color: var(--faint); padding: 12px 4px; }
 
 .detail { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -246,6 +247,31 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
   background: #f3f1e8; border: 1px solid var(--line); border-left: 3px solid var(--faint);
   border-radius: 6px; padding: 12px 14px; font-size: 13px; color: var(--muted); margin-bottom: 14px;
 }
+.error-banner {
+  background: #fbeae7; border: 1px solid var(--red); border-left: 3px solid var(--red);
+  border-radius: 6px; padding: 12px 14px; font-size: 13px; font-weight: 600;
+  color: #7a241a; margin-bottom: 14px;
+}
+
+/* ---------- Model trace disclosure ---------- */
+.trace-disclosure { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.trace-disclosure > summary {
+  cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-blue);
+  list-style: none; user-select: none;
+}
+.trace-disclosure > summary::-webkit-details-marker { display: none; }
+.trace-disclosure > summary::before { content: "▸ "; }
+.trace-disclosure[open] > summary::before { content: "▾ "; }
+.trace-body { margin-top: 10px; }
+.trace-head { font: 600 11px ui-monospace, Menlo, monospace; color: var(--muted); margin-bottom: 8px; }
+.trace-call { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; background: var(--card); }
+.tc-seq { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+.tc-label { font-size: 10px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; margin-top: 6px; }
+.tc-pre {
+  font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word;
+  margin: 2px 0 0; color: var(--ink); max-height: 180px; overflow: auto;
+}
+.tc-pre.tc-err { color: var(--red); }
 
 .detail-foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 4px; }
 

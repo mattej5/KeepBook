@@ -37,6 +37,7 @@
       getClients: function () { return j("/clients"); },
       getDocuments: function () { return j("/documents"); },
       getDocument: function (id) { return j("/documents/" + id); },
+      getTrace: function (id) { return j("/documents/" + id + "/trace"); },
       getStats: function () { return j("/stats"); },
       getQueue: function () { return j("/queue"); },
       imageUrl: function (doc) { return base + "/documents/" + doc.id + "/image"; },
@@ -168,6 +169,17 @@
         });
       },
       imageUrl: function (doc) { return doc && doc.image_path ? doc.image_path : ""; },
+
+      getTrace: function (id) {
+        return ready().then(function () {
+          var d = state.documents.filter(function (x) { return x.id === id; })[0];
+          return {
+            doc_id: id, model_runtime: "mock", model_name: "gemma4:e4b",
+            status: d ? d.status : "", doc_type: d ? d.doc_type : "",
+            latency_s: null, retried: false, calls: []
+          };
+        });
+      },
 
       getStats: function () {
         return ready().then(function () {

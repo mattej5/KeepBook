@@ -15,13 +15,21 @@
     box1_interest: "Interest income (Box 1)", box4_fed_withheld: "Fed. tax withheld (Box 4)",
     box1_nonemployee_comp: "Nonemployee comp. (Box 1)",
     lender: "Lender", borrower: "Borrower", borrower_tin: "Borrower TIN",
-    box1_mortgage_interest: "Mortgage interest (Box 1)"
+    box1_mortgage_interest: "Mortgage interest (Box 1)",
+    // Real backend schema keys (backend/pipeline.py FIELD_SCHEMA) — without these,
+    // K-1 / 1099-INT / 1098 render raw snake_case in Review.
+    recipient_name: "Recipient", box1_interest_income: "Interest income (Box 1)",
+    box3_other_income: "Other income (Box 3)",
+    partnership_name: "Partnership", partner_name: "Partner",
+    partnership_ein: "Partnership EIN", ordinary_income: "Ordinary income",
+    borrower_name: "Borrower"
   };
   var DOC_TYPES = ["W-2", "1099-NEC", "1099-INT", "1099-MISC", "K-1", "1098"];
-  var TIN_FIELDS = { ssn: 1, recipient_tin: 1, borrower_tin: 1 };
+  var TIN_FIELDS = { ssn: 1, recipient_tin: 1, borrower_tin: 1, partnership_ein: 1 };
   function labelFor(k) { return FIELD_LABELS[k] || k; }
   function isMoney(k) { return /^box|wages|interest|withheld|comp|income|mortgage/.test(k); }
-  function isTin(k) { return !!TIN_FIELDS[k]; }
+  // Mask any SSN/TIN/EIN — the privacy story. Covers ssn, *_tin, *_ein.
+  function isTin(k) { return !!TIN_FIELDS[k] || k === "ssn" || /(?:tin|ein)$/.test(k); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function maskTin(v) {
@@ -37,7 +45,7 @@
   }
 
   /* ---------- app state ---------- */
-  var state = { view: "capture", dropped: [], polling: null, selectedDoc: null, clients: [], justConfirmed: {} };
+  var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {} };
 
   var $ = function (id) { return document.getElementById(id); };
   function toast(msg) {
@@ -48,6 +56,7 @@
   /* ================= NAVIGATION ================= */
   function show(view) {
     state.view = view;
+    if (state.nerdsTimer) { clearInterval(state.nerdsTimer); state.nerdsTimer = null; }
     document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
     $("view-" + view).classList.add("active");
     document.querySelectorAll("#nav button").forEach(function (b) {
@@ -56,7 +65,14 @@
     if (view === "capture") renderCapture();
     if (view === "review") renderReview();
     if (view === "dashboard") renderDashboard();
-    if (view === "nerds") renderNerds();
+    if (view === "nerds") {
+      renderNerds();
+      // refresh the live telemetry every 5s while this view is on screen
+      state.nerdsTimer = setInterval(function () {
+        if (state.view === "nerds") renderNerds();
+        else { clearInterval(state.nerdsTimer); state.nerdsTimer = null; }
+      }, 5000);
+    }
   }
 
   function fmtReceived(iso) {
@@ -103,29 +119,50 @@
   }
 
   function addFiles(list) {
+    var rejected = 0;
     for (var i = 0; i < list.length; i++) {
       var f = list[i];
-      if (f.type && f.type.indexOf("image") === 0) { try { f._url = URL.createObjectURL(f); } catch (e) {} }
+      var okType = f.type && f.type.indexOf("image") === 0;
+      var okExt = /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "");
+      if (!okType && !okExt) { rejected++; continue; }  // KeepBook reads images, not PDFs
+      if (okType) { try { f._url = URL.createObjectURL(f); } catch (e) {} }
       state.dropped.push(f);
     }
+    if (rejected) toast(rejected + (rejected === 1 ? " file" : " files") + " skipped — KeepBook reads images, not PDFs");
     renderCapture();
   }
 
   function startProcessing() {
     var files = state.dropped.slice();
     if (!files.length) return;
-    state.processing = { total: files.length };
+    // Snapshot the done-count first so pre-seeded / earlier docs don't inflate
+    // this batch's progress bar (IMPROVEMENTS #3).
+    api.getQueue().then(
+      function (q0) { beginBatch(files, (q0 && q0.done) || 0); },
+      function () { beginBatch(files, 0); }
+    );
+  }
+
+  function beginBatch(files, baseDone) {
+    state.processing = { total: files.length, baseDone: baseDone };
     state.dropped = [];
-    api.intake(files).then(function () { pollQueue(true); });
-    renderProcessing({ pending: files.length, processing: null, done: 0 });
+    renderProcessing({ pending: files.length, processing: null, done: baseDone });
     $("process-btn").disabled = true;
     $("process-btn").textContent = "Processing…";
+    api.intake(files).then(function () { pollQueue(true); }).catch(function () {
+      toast("Couldn’t reach the model — is the model server running?");
+      state.processing = null;
+      $("process-btn").disabled = false;
+      $("process-btn").textContent = "Process files";
+      renderCapture();
+    });
   }
 
   function renderProcessing(q) {
+    var base = state.processing ? (state.processing.baseDone || 0) : 0;
     var total = state.processing ? state.processing.total : (q.pending + q.done);
-    var doneCount = q.done;
-    var pct = total ? Math.round((doneCount / total) * 100) : 0;
+    var doneCount = Math.max(0, q.done - base);
+    var pct = total ? Math.min(100, Math.round((doneCount / total) * 100)) : 0;
     var rows = "";
     for (var i = 0; i < total; i++) {
       var label, cls;
@@ -148,7 +185,10 @@
     function step() {
       api.getQueue().then(function (q) {
         if (state.view === "capture") renderProcessing(q);
-        if (q.pending === 0) {
+        // Done only when nothing is pending AND nothing is in flight — the
+        // in-flight doc keeps status "pending" until the worker finishes, so
+        // this no longer declares completion a doc early (IMPROVEMENTS #3).
+        if (q.pending === 0 && !q.processing) {
           clearInterval(state.polling); state.polling = null;
           var n = state.processing ? state.processing.total : q.done;
           state.processing = null;
@@ -162,6 +202,12 @@
           }
           toast(n + " document" + (n === 1 ? "" : "s") + " ready in Review");
         }
+      }).catch(function () {
+        clearInterval(state.polling); state.polling = null;
+        state.processing = null;
+        toast("Lost the model connection — is the server running?");
+        $("process-btn").disabled = false;
+        $("process-btn").textContent = "Process files";
       });
     }
     if (immediate) step();
@@ -171,7 +217,7 @@
   /* ================= BIN REVIEW & CORRECTION ================= */
   function renderReview() {
     api.getDocuments().then(function (docs) {
-      var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized"; });
+      var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized" || d.status === "error"; });
       var listEl = $("review-list");
       if (!needs.length) {
         listEl.innerHTML = '<div class="rl-empty">Nothing to review. All caught up.</div>';
@@ -183,11 +229,13 @@
         state.selectedDoc = needs[0].id;
       }
       listEl.innerHTML = needs.map(function (d) {
-        var badge = d.status === "unrecognized"
-          ? '<span class="rl-badge unrec">Unrecognized</span>'
-          : '<span class="rl-badge needs">Needs review</span>';
+        var badge = d.status === "error"
+          ? '<span class="rl-badge error">Error</span>'
+          : d.status === "unrecognized"
+            ? '<span class="rl-badge unrec">Unrecognized</span>'
+            : '<span class="rl-badge needs">Needs review</span>';
         var client = clientName(d.client_id) || "Unassigned";
-        var typ = d.status === "unrecognized" ? "Unknown document" : d.doc_type;
+        var typ = d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type;
         return '<button class="rl-item ' + (d.id === state.selectedDoc ? "active" : "") + '" data-id="' + d.id + '">' +
           '<div class="rl-type">' + esc(typ) + '</div>' +
           '<div class="rl-client">' + esc(client) + '</div>' + badge + '</button>';
@@ -213,23 +261,28 @@
         : '<div class="doc-image"><div class="noimg">No preview available</div></div>';
 
       var confirmed = doc.status === "confirmed";
+      var errored = doc.status === "error";
       var unrec = doc.status === "unrecognized";
       var right = "";
 
-      var heading = unrec ? "Unrecognized document" : doc.doc_type;
+      var heading = errored ? "Model unavailable" : unrec ? "Unrecognized document" : doc.doc_type;
       right += '<h2>' + esc(heading) + '</h2>';
       right += '<div class="doc-sub">' + (confirmed
         ? 'Confirmed · in ' + esc(clientName(doc.client_id) || "—") + '\'s file'
-        : 'Model read this ' + (unrec ? 'file' : doc.doc_type + '. Check it against the image, correct anything wrong, then confirm.')) + '</div>';
+        : errored
+          ? 'This document could not be read.'
+          : 'Model read this ' + (unrec ? 'file' : doc.doc_type + '. Check it against the image, correct anything wrong, then confirm.')) + '</div>';
 
-      if (unrec && !confirmed) {
+      if (errored && !confirmed) {
+        right += '<div class="error-banner">Couldn’t reach the model — is the model server running? Retry.</div>';
+      } else if (unrec && !confirmed) {
         right += '<div class="unrec-banner">The model would not force this into a tax-form type. Classify it by hand if it belongs to a client, or leave it here.</div>';
       }
 
       // client + doc_type pickers (needed to confirm; per docs/API.md /confirm)
       if (!confirmed) {
         right += '<div class="doc-type-picker">';
-        if (unrec) {
+        if (unrec || errored) {
           right += '<label>Document type</label><select class="select" id="pick-type">' +
             '<option value="">Choose type…</option>' +
             DOC_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join("") +
@@ -265,9 +318,14 @@
           right += '</div></div>';
         });
         right += '</div>';
-      } else if (!unrec) {
+      } else if (!unrec && !errored) {
         right += '<div class="rl-empty">No fields extracted.</div>';
       }
+
+      // model trace disclosure — one click answers "what did the model see and
+      // say?" (served from raws/<id>.json via GET /documents/<id>/trace)
+      right += '<details class="trace-disclosure"><summary>View model trace</summary>' +
+        '<div class="trace-body">Loading…</div></details>';
 
       // footer
       right += '<div class="detail-foot">';
@@ -277,7 +335,7 @@
           '<button class="btn-ghost btn-sm" id="to-dash">See it on the Dashboard →</button>';
       } else {
         right += '<div class="privacy-line">Confirming files this into the client\'s checklist.</div>' +
-          '<button class="btn btn-sm" id="confirm-btn">Confirm ' + (unrec ? "document" : doc.doc_type) + '</button>';
+          '<button class="btn btn-sm" id="confirm-btn">Confirm ' + (unrec || errored ? "document" : doc.doc_type) + '</button>';
       }
       right += '</div>';
 
@@ -286,6 +344,36 @@
 
       var cb = $("confirm-btn"); if (cb) cb.onclick = function () { doConfirm(doc); };
       var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
+      // lazy-load the model trace the first time the disclosure is opened
+      var det = el.querySelector(".trace-disclosure");
+      if (det) det.addEventListener("toggle", function () {
+        if (det.open && !det.dataset.loaded) { det.dataset.loaded = "1"; renderTrace(doc.id, det.querySelector(".trace-body")); }
+      });
+    });
+  }
+
+  function renderTrace(id, bodyEl) {
+    if (!bodyEl) return;
+    api.getTrace(id).then(function (t) {
+      var head = '<div class="trace-head">' +
+        esc((t.model_runtime || "") + " · " + (t.model_name || "")) +
+        (t.latency_s != null ? " · " + t.latency_s + "s" : "") +
+        (t.retried ? " · retried" : "") + '</div>';
+      var calls = (t.calls || []).map(function (c) {
+        var prompt = String(c.prompt == null ? "" : c.prompt);
+        var promptHead = prompt.slice(0, 240) + (prompt.length > 240 ? "…" : "");
+        var isErr = c.error != null;
+        var resp = isErr ? ("ERROR: " + c.error) : String(c.response == null ? "" : c.response);
+        return '<div class="trace-call"><div class="tc-seq">call ' + esc(String(c.seq || "?")) + '</div>' +
+          '<div class="tc-label">prompt</div><pre class="tc-pre">' + esc(promptHead) + '</pre>' +
+          '<div class="tc-label">response</div><pre class="tc-pre' + (isErr ? " tc-err" : "") + '">' + esc(resp) + '</pre></div>';
+      }).join("");
+      bodyEl.innerHTML = head + (calls || '<div class="rl-empty">No model calls recorded.</div>');
+    }).catch(function (e) {
+      var msg = /404/.test(e.message)
+        ? "No model trace was recorded for this document."
+        : "Trace unavailable (" + e.message + ").";
+      bodyEl.innerHTML = '<div class="rl-empty">' + esc(msg) + '</div>';
     });
   }
 
@@ -319,14 +407,16 @@
       renderDetail(updated.id);
       // refresh the list so the confirmed doc drops out of "needs review"
       api.getDocuments().then(function (docs) {
-        var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized"; });
+        var needs = docs.filter(function (d) { return d.status === "extracted" || d.status === "unrecognized" || d.status === "error"; });
         var listEl = $("review-list");
         listEl.innerHTML = needs.length ? needs.map(function (d) {
-          var badge = d.status === "unrecognized"
-            ? '<span class="rl-badge unrec">Unrecognized</span>'
-            : '<span class="rl-badge needs">Needs review</span>';
+          var badge = d.status === "error"
+            ? '<span class="rl-badge error">Error</span>'
+            : d.status === "unrecognized"
+              ? '<span class="rl-badge unrec">Unrecognized</span>'
+              : '<span class="rl-badge needs">Needs review</span>';
           return '<button class="rl-item" data-id="' + d.id + '"><div class="rl-type">' +
-            esc(d.status === "unrecognized" ? "Unknown document" : d.doc_type) + '</div>' +
+            esc(d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type) + '</div>' +
             '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + '</button>';
         }).join("") : '<div class="rl-empty">Nothing left to review. All caught up.</div>';
         listEl.querySelectorAll("[data-id]").forEach(function (b) {
@@ -431,24 +521,34 @@
       html += '<div class="screen-head">' +
         '<div><div style="display:flex;align-items:center;gap:10px">' +
         '<h1>Stats for nerds</h1><span class="live-dot-wrap"><span class="live-dot"></span>live</span></div>' +
-        '<div class="sub">Past 24 hours only — stats reset as they age out. Nothing leaves this Mac.</div></div>' +
+        '<div class="sub">The dashboard shows the last 24 hours. Nothing leaves this Mac.</div></div>' +
         '<div class="nerd-runtime tnum">Gemma 4 e4b · on-device</div></div>';
 
-      // headline tiles (T33: docs processed, first-try classification %, correction rate, median latency)
+      // headline tiles (T33: docs processed, first-try classification %, correction rate, latency)
       html += '<div class="tiles">' +
         tile(tt.docs_processed, "docs processed", "") +
         tile(pct0(tt.first_try_type_acc), "classified right first try", "blue") +
         tile(pct(tt.correction_rate), "correction rate (red pen)", "red") +
-        tile(tt.median_latency_s + "s", "median per doc", "") +
+        '<div class="tile"><div class="tile-num tnum">' + tt.median_latency_s + 's</div>' +
+        '<div class="tile-lbl">median · p95 ' + tt.p95_latency_s + 's</div></div>' +
         '</div>';
 
-      // docs-per-hour bar strip
+      // docs-per-hour bar strip. Labels are the viewer's LOCAL wall-clock hour
+      // (the /stats/timeline buckets carry UTC hours; the strip is hourly and
+      // ends at the current hour, so derive local labels from position).
       var max = Math.max.apply(null, t.buckets.map(function (b) { return b.docs; }).concat([1]));
+      var nowHr = new Date();
+      var nB = t.buckets.length;
+      function localHour(i) {
+        var d = new Date(nowHr.getTime()); d.setMinutes(0, 0, 0);
+        d.setHours(d.getHours() - (nB - 1 - i));
+        return ("0" + d.getHours()).slice(-2) + ":00";
+      }
       var bars = t.buckets.map(function (b, i) {
         var h = Math.max(4, Math.round(b.docs / max * 64));
         var recent = i >= t.buckets.length - 3;
         return '<div class="bar' + (recent ? " recent" : "") + '" style="height:' + h + 'px" title="' +
-          esc(b.hour) + ' — ' + b.docs + ' doc' + (b.docs === 1 ? "" : "s") +
+          esc(localHour(i)) + ' — ' + b.docs + ' doc' + (b.docs === 1 ? "" : "s") +
           (b.corrections ? ", " + b.corrections + " correction" + (b.corrections === 1 ? "" : "s") : "") + '"></div>';
       }).join("");
       html += '<div class="nerd-block">' +
