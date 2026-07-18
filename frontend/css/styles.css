@@ -358,6 +358,41 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
 @keyframes ink-in { from { stroke-dashoffset: 32; } to { stroke-dashoffset: 0; } }
 .ink-draw { stroke-dasharray: 32; stroke-dashoffset: 32; animation: ink-in .6s ease .15s forwards; }
 
+/* ---------- New-client (create) affordance ---------- */
+.new-client-ghost {
+  border: 2px dashed var(--line); background: transparent; box-shadow: none;
+  transition: border-color .15s ease;
+}
+.new-client-ghost:hover { border-color: var(--ink-blue); }
+.nc-ghost-btn {
+  width: 100%; padding: 20px; background: none; border: none; cursor: pointer;
+  font-family: var(--font-hand); font-size: 26px; font-weight: 600; color: var(--faint);
+  transition: color .15s ease;
+}
+.new-client-ghost:hover .nc-ghost-btn { color: var(--ink-blue); }
+
+.new-client-form .card-pad { padding: 22px 26px 24px; }
+.nc-title { font-family: var(--font-hand); font-size: 30px; font-weight: 600; line-height: 1; }
+.nc-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 16px 0 6px; }
+.nc-hint { font-weight: 400; color: var(--faint); }
+.nc-name { width: 100%; max-width: 440px; }
+.nc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.nc-chips-empty { font-size: 12.5px; color: var(--faint); }
+.nc-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink); background: var(--paper-deep); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 6px 4px 12px;
+}
+.nc-chip-x {
+  border: none; background: none; cursor: pointer; color: var(--faint);
+  font-size: 16px; line-height: 1; padding: 0 3px; border-radius: 999px;
+}
+.nc-chip-x:hover { color: var(--red); }
+.nc-add { display: flex; gap: 8px; margin-top: 12px; }
+.nc-add-input { flex: 1; max-width: 320px; }
+.nc-error { font-size: 12px; font-weight: 600; color: var(--red); margin-top: 12px; min-height: 15px; }
+.nc-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
 /* ---------- Stats line ---------- */
 .stats-bar {
   display: flex; align-items: center; gap: 26px; flex-wrap: wrap;

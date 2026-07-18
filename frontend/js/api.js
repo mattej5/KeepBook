@@ -35,6 +35,13 @@
     }
     return {
       getClients: function () { return j("/clients"); },
+      createClient: function (payload) {
+        return j("/clients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      },
       getDocuments: function () { return j("/documents"); },
       getDocument: function (id) { return j("/documents/" + id); },
       getTrace: function (id) { return j("/documents/" + id + "/trace"); },
@@ -165,6 +172,30 @@
       resetMock: function () { try { localStorage.removeItem(STORE_KEY); } catch (e) {} },
 
       getClients: function () { return ready().then(function () { return clone(state.clients); }); },
+
+      // Create a client. Mirrors POST /clients: name required (else reject like
+      // the backend's 400), and the id is minted from the name the same way the
+      // backend's _next_client_id does (slugify + numeric dedupe) so duplicate
+      // names get distinct ids and the mock demo matches a live backend. Persists
+      // through the same localStorage mechanism confirm() uses.
+      createClient: function (payload) {
+        return ready().then(function () {
+          var name = payload && payload.name;
+          if (!name) return Promise.reject(new Error("client name required"));
+          var expected = (payload && payload.expected_docs) || [];
+          var slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "client";
+          var base = "client_" + slug;
+          var taken = {};
+          state.clients.forEach(function (c) { taken[c.id] = 1; });
+          var cid = base, n = 2;
+          while (taken[cid]) { cid = base + "_" + n; n++; }
+          var client = { id: cid, name: name, expected_docs: expected.slice(), received_docs: [] };
+          state.clients.push(client);
+          persist();
+          return clone(client);
+        });
+      },
+
       getDocuments: function () { return ready().then(function () { tick(); return clone(state.documents); }); },
       getDocument: function (id) {
         return ready().then(function () {

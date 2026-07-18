@@ -37,6 +37,16 @@
   var CLASSIFY_ONLY = {};
   CLASSIFY_ONLY_TYPES.forEach(function (t) { CLASSIFY_ONLY[t] = 1; });
   var DOC_TYPES = ["W-2", "1099-NEC", "1099-INT", "1099-MISC", "K-1", "1098"].concat(CLASSIFY_ONLY_TYPES);
+  // The firm's STANDARD tax-organizer checklist — the single generic list every
+  // new client starts from. This is the "organizer template" layer of the
+  // roadmap: seed the new-client expected-docs picker from these forms, then let
+  // the preparer PRUNE per client (remove chips that don't apply, add extras)
+  // BEFORE creating. Defined once here; the create form renders its chips from a
+  // copy of this array (never a second hardcoded list) so pruning stays honest.
+  var ORGANIZER_TEMPLATE = [
+    "W-2", "1099-NEC", "1099-INT", "1099-MISC", "K-1",
+    "1098", "1099-DIV", "charitable receipt", "brokerage statement"
+  ];
   var TIN_FIELDS = { ssn: 1, recipient_tin: 1, borrower_tin: 1, partnership_ein: 1 };
   function labelFor(k) { return FIELD_LABELS[k] || k; }
   function isClassifyOnly(t) { return !!CLASSIFY_ONLY[t]; }
@@ -59,6 +69,9 @@
 
   /* ---------- app state ---------- */
   var state = { view: "capture", dropped: [], polling: null, nerdsTimer: null, selectedDoc: null, clients: [], justConfirmed: {} };
+  // New-client create form: open flag, the in-progress name, and the pruned
+  // expected-docs list (seeded from ORGANIZER_TEMPLATE when the form opens).
+  var newClientState = { open: false, name: "", docs: [], error: "" };
 
   var $ = function (id) { return document.getElementById(id); };
   function toast(msg) {
@@ -597,8 +610,130 @@
       grid.querySelectorAll("[data-req]").forEach(function (b) {
         b.onclick = function () { toast("Chase email drafted for " + b.dataset.req); };
       });
+      // Quiet "+ New client" affordance at the end of the grid (ghost card that
+      // expands into an inline create form).
+      appendNewClientCard();
       // one-shot ink animations consumed on render
       state.justConfirmed = {};
+    });
+  }
+
+  /* ---------- New-client (create) affordance ---------- */
+  // A ghost card pinned after the client cards. Collapsed it is a quiet
+  // "+ New client" prompt; clicking expands it into an in-page form (plain DOM,
+  // no modal library). paintNewClientCard() rebuilds the whole card; paintChips()
+  // rebuilds ONLY the chip list so editing a chip never steals focus from the
+  // name field.
+  function appendNewClientCard() {
+    var grid = $("client-grid");
+    if (!grid) return;
+    var card = document.createElement("div");
+    card.id = "new-client-card";
+    grid.appendChild(card);
+    paintNewClientCard();
+  }
+
+  function openNewClientForm() {
+    // Seed the picker from the firm's standard organizer template (a COPY, so
+    // pruning this client never mutates the shared template).
+    newClientState = { open: true, name: "", docs: ORGANIZER_TEMPLATE.slice(), error: "" };
+    paintNewClientCard();
+  }
+
+  function closeNewClientForm() {
+    newClientState = { open: false, name: "", docs: [], error: "" };
+    paintNewClientCard();
+  }
+
+  function ncSetError(msg) {
+    newClientState.error = msg;
+    var e = $("nc-error");
+    if (e) e.textContent = msg || "";
+  }
+
+  function ncAddDoc() {
+    var el = $("nc-add-input");
+    if (!el) return;
+    var v = (el.value || "").trim();
+    if (!v) return;
+    if (newClientState.docs.indexOf(v) < 0) newClientState.docs.push(v);  // no dup chips
+    el.value = "";
+    paintChips();
+    el.focus();
+  }
+
+  function paintChips() {
+    var wrap = $("nc-chips");
+    if (!wrap) return;
+    if (!newClientState.docs.length) {
+      wrap.innerHTML = '<span class="nc-chips-empty">No forms expected yet — add one below, or create with none.</span>';
+      return;
+    }
+    wrap.innerHTML = newClientState.docs.map(function (t, i) {
+      return '<span class="nc-chip">' + esc(t) +
+        '<button class="nc-chip-x" data-i="' + i + '" title="Remove ' + esc(t) + '" aria-label="Remove ' + esc(t) + '">×</button></span>';
+    }).join("");
+    wrap.querySelectorAll("[data-i]").forEach(function (b) {
+      b.onclick = function () { newClientState.docs.splice(+b.dataset.i, 1); paintChips(); };
+    });
+  }
+
+  function paintNewClientCard() {
+    var card = $("new-client-card");
+    if (!card) return;
+    if (!newClientState.open) {
+      card.className = "card client-card new-client-ghost";
+      card.innerHTML = '<button class="nc-ghost-btn" id="nc-open">+ New client</button>';
+      var openBtn = $("nc-open");
+      if (openBtn) openBtn.onclick = openNewClientForm;
+      return;
+    }
+    card.className = "card client-card new-client-form";
+    card.innerHTML = '<div class="card-pad">' +
+      '<div class="nc-title">New client</div>' +
+      '<label class="nc-label" for="nc-name">Client name</label>' +
+      '<input class="select nc-name" id="nc-name" type="text" autocomplete="off" ' +
+        'placeholder="e.g. Okafor, Ruth" value="' + esc(newClientState.name) + '">' +
+      '<label class="nc-label">Expected documents ' +
+        '<span class="nc-hint">— the firm’s standard organizer; remove what this client doesn’t owe</span></label>' +
+      '<div class="nc-chips" id="nc-chips"></div>' +
+      '<div class="nc-add"><input class="select nc-add-input" id="nc-add-input" type="text" ' +
+        'autocomplete="off" placeholder="Add another form…">' +
+        '<button class="btn-ghost btn-sm" id="nc-add-btn" type="button">Add</button></div>' +
+      '<div class="nc-error" id="nc-error">' + esc(newClientState.error) + '</div>' +
+      '<div class="nc-foot"><button class="btn-ghost btn-sm" id="nc-cancel" type="button">Cancel</button>' +
+        '<button class="btn btn-sm" id="nc-create" type="button">Create client</button></div>' +
+      '</div>';
+    paintChips();
+    var nameEl = $("nc-name");
+    if (nameEl) {
+      nameEl.oninput = function () { newClientState.name = nameEl.value; if (newClientState.error) ncSetError(""); };
+      nameEl.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); submitNewClient(); } };
+      nameEl.focus();
+    }
+    var addInput = $("nc-add-input");
+    if (addInput) addInput.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); ncAddDoc(); } };
+    var addBtn = $("nc-add-btn"); if (addBtn) addBtn.onclick = ncAddDoc;
+    var cancel = $("nc-cancel"); if (cancel) cancel.onclick = closeNewClientForm;
+    var create = $("nc-create"); if (create) create.onclick = submitNewClient;
+  }
+
+  function submitNewClient() {
+    var name = (newClientState.name || "").trim();
+    if (!name) { ncSetError("Client name is required."); var n = $("nc-name"); if (n) n.focus(); return; }
+    var payload = { name: name, expected_docs: newClientState.docs.slice() };
+    var btn = $("nc-create");
+    if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+    api.createClient(payload).then(function (client) {
+      toast("Client added — " + client.name);
+      closeNewClientForm();
+      // Re-render the dashboard so the new client appears immediately with a
+      // 0/N checklist (received_docs is empty on a brand-new client, so every
+      // expected form shows MISSING).
+      renderDashboard();
+    }).catch(function (e) {
+      ncSetError("Couldn't create client: " + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = "Create client"; }
     });
   }
 
