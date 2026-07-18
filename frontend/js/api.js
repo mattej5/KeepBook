@@ -42,6 +42,16 @@
           body: JSON.stringify(payload)
         });
       },
+      updateClient: function (id, payload) {
+        return j("/clients/" + id, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      },
+      deleteClient: function (id) {
+        return j("/clients/" + id, { method: "DELETE" });
+      },
       getDocuments: function () { return j("/documents"); },
       getDocument: function (id) { return j("/documents/" + id); },
       getTrace: function (id) { return j("/documents/" + id + "/trace"); },
@@ -215,6 +225,55 @@
           state.clients.push(client);
           persist();
           return clone(client);
+        });
+      },
+
+      // Edit a client. Mirrors PATCH /clients/{id}: partial update, id is never
+      // regenerated (documents reference it), name (when present) must be
+      // non-empty, expected_docs is a full replace deduped with order preserved,
+      // received_docs is left untouched. Persists through the same localStorage
+      // mechanism the other mutations use.
+      updateClient: function (id, payload) {
+        return ready().then(function () {
+          var c = state.clients.filter(function (x) { return x.id === id; })[0];
+          if (!c) return Promise.reject(new Error("no client " + id));
+          if (payload && "name" in payload) {
+            var name = payload.name;
+            if (!name || !String(name).trim()) {
+              return Promise.reject(new Error("client name must be non-empty"));
+            }
+            c.name = name;
+          }
+          if (payload && "expected_docs" in payload) {
+            var seen = {}, out = [];
+            (payload.expected_docs || []).forEach(function (t) {
+              var s = String(t);
+              if (!seen[s]) { seen[s] = 1; out.push(s); }
+            });
+            c.expected_docs = out;
+          }
+          persist();
+          return clone(c);
+        });
+      },
+
+      // Delete a client (a duplicate/test client). Mirrors DELETE /clients/{id}:
+      // GUARDED — reject while any document references the client (no orphaning),
+      // otherwise remove it. The rejection carries the document count so the UI
+      // can explain the block, matching the backend's 409 body.
+      deleteClient: function (id) {
+        return ready().then(function () {
+          var idx = state.clients.map(function (c) { return c.id; }).indexOf(id);
+          if (idx < 0) return Promise.reject(new Error("no client " + id));
+          var refs = state.documents.filter(function (d) { return d.client_id === id; }).length;
+          if (refs > 0) {
+            var err = new Error("client has " + refs + " document" + (refs === 1 ? "" : "s") + " referencing it");
+            err.document_count = refs;
+            return Promise.reject(err);
+          }
+          state.clients.splice(idx, 1);
+          persist();
+          return { deleted: id };
         });
       },
 

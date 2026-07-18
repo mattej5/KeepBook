@@ -63,6 +63,8 @@
   function money(v) { return v === "" || v == null ? "—" : "$" + v; }
 
   var CHECK_SVG = '<svg width="18" height="18" viewBox="0 0 24 24"><path d="M4 13 L10 18.5 L21 4.5" fill="none" stroke="#2f5fd0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  // Quiet pen glyph for the per-card "edit client" affordance.
+  var PEN_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   function checkSvgAnimated() {
     return '<svg width="18" height="18" viewBox="0 0 24 24"><path class="ink-draw" d="M4 13 L10 18.5 L21 4.5" fill="none" stroke="#2f5fd0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
@@ -72,6 +74,11 @@
   // New-client create form: open flag, the in-progress name, and the pruned
   // expected-docs list (seeded from ORGANIZER_TEMPLATE when the form opens).
   var newClientState = { open: false, name: "", docs: [], error: "" };
+  // Edit-client form (CRUD-AUDIT gaps #2/#4): rename + edit expected_docs, and
+  // delete a doc-free client. Mirrors newClientState; docCount is the number of
+  // documents referencing this client at open time, which decides whether the
+  // delete control (0 docs) or the muted "reassign first" note (>0) is shown.
+  var editClientState = { open: false, id: null, name: "", docs: [], docCount: 0, error: "" };
   // CSV client-list import (T69). When non-null the new-client card shows a
   // preview-then-commit panel instead of the single-client form. Shape:
   // { toCreate:[{name,expected_docs}], dupes, found, blanks, headerSkipped, fileName }.
@@ -730,6 +737,7 @@
     Promise.all([api.getClients(), api.getDocuments(), api.getStats()]).then(function (res) {
       var clients = res[0], docs = res[1], stats = res[2];
       state.clients = clients;
+      state.dashboardDocs = docs;   // used by the edit form to count a client's docs
       renderStats(stats, fmtIntakeTime(lastIntakeIso(docs)));
 
       var grid = $("client-grid");
@@ -743,8 +751,13 @@
           toast("Draft opened in your mail app");
         };
       });
-      // The create form renders as a full-row card in the grid; its trigger is
-      // the static "Add Client" FAB, bound once in boot().
+      // Quiet pen on each card opens the edit form for that client.
+      grid.querySelectorAll("[data-edit-client]").forEach(function (b) {
+        b.onclick = function () { openEditClientForm(b.dataset.editClient); };
+      });
+      // The create + edit forms render as full-row cards in the grid; the create
+      // form's trigger is the static "Add Client" FAB (bound once in boot()).
+      appendEditClientCard();
       appendNewClientCard();
       // one-shot ink animations consumed on render
       state.justConfirmed = {};
@@ -769,6 +782,7 @@
   function openNewClientForm() {
     // Seed the picker from the firm's standard organizer template (a COPY, so
     // pruning this client never mutates the shared template).
+    if (editClientState.open) closeEditClientForm();  // never stack two full-row forms
     csvImportState = null;
     newClientState = { open: true, name: "", docs: ORGANIZER_TEMPLATE.slice(), error: "" };
     paintNewClientCard();
@@ -996,6 +1010,159 @@
     });
   }
 
+  /* ---------- Edit-client (rename / expected_docs / delete) affordance ---------- */
+  // A full-row card (like the create form) that opens below the grid when a
+  // card's pen is clicked. paintEditClientCard() rebuilds the whole card;
+  // paintEditChips() rebuilds ONLY the chip list so editing a chip never steals
+  // focus from the name field.
+  function appendEditClientCard() {
+    var grid = $("client-grid");
+    if (!grid) return;
+    var card = document.createElement("div");
+    card.id = "edit-client-card";
+    grid.appendChild(card);
+    paintEditClientCard();
+  }
+
+  function openEditClientForm(clientId) {
+    var c = (state.clients || []).filter(function (x) { return x.id === clientId; })[0];
+    if (!c) return;
+    // Close the create form so two full-row forms never stack.
+    if (newClientState.open) closeNewClientForm();
+    var docCount = (state.dashboardDocs || []).filter(function (d) {
+      return d.client_id === clientId;
+    }).length;
+    editClientState = {
+      open: true, id: clientId, name: c.name,
+      docs: (c.expected_docs || []).slice(),   // COPY — editing never mutates state.clients
+      docCount: docCount, error: ""
+    };
+    paintEditClientCard();
+    var card = $("edit-client-card");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+    var nameEl = $("ec-name"); if (nameEl) nameEl.focus();
+  }
+
+  function closeEditClientForm() {
+    editClientState = { open: false, id: null, name: "", docs: [], docCount: 0, error: "" };
+    paintEditClientCard();
+  }
+
+  function ecSetError(msg) {
+    editClientState.error = msg;
+    var e = $("ec-error");
+    if (e) e.textContent = msg || "";
+  }
+
+  function ecAddDoc() {
+    var el = $("ec-add-input");
+    if (!el) return;
+    var v = (el.value || "").trim();
+    if (!v) return;
+    if (editClientState.docs.indexOf(v) < 0) editClientState.docs.push(v);  // no dup chips
+    el.value = "";
+    paintEditChips();
+    el.focus();
+  }
+
+  function paintEditChips() {
+    var wrap = $("ec-chips");
+    if (!wrap) return;
+    if (!editClientState.docs.length) {
+      wrap.innerHTML = '<span class="nc-chips-empty">No forms expected — add one below, or save with none.</span>';
+      return;
+    }
+    wrap.innerHTML = editClientState.docs.map(function (t, i) {
+      return '<span class="nc-chip">' + esc(t) +
+        '<button class="nc-chip-x" data-i="' + i + '" title="Remove ' + esc(t) + '" aria-label="Remove ' + esc(t) + '">×</button></span>';
+    }).join("");
+    wrap.querySelectorAll("[data-i]").forEach(function (b) {
+      b.onclick = function () { editClientState.docs.splice(+b.dataset.i, 1); paintEditChips(); };
+    });
+  }
+
+  function paintEditClientCard() {
+    var card = $("edit-client-card");
+    if (!card) return;
+    if (!editClientState.open) {
+      card.hidden = true; card.className = ""; card.innerHTML = "";
+      return;
+    }
+    var n = editClientState.docCount;
+    // Delete is offered ONLY when the client has zero documents (the backend
+    // guards the same way with a 409); otherwise a muted note points at the fix.
+    var deleteControl = n > 0
+      ? '<span class="ec-locked-note">has ' + n + ' document' + (n === 1 ? "" : "s") +
+          ' — reassign or discard them first</span>'
+      : '<button class="ec-danger" id="ec-delete" type="button">Delete client</button>';
+    card.hidden = false;
+    card.className = "card client-card new-client-form";
+    card.innerHTML = '<div class="card-pad">' +
+      '<div class="nc-title">Edit client</div>' +
+      '<label class="nc-label" for="ec-name">Client name</label>' +
+      '<input class="select nc-name" id="ec-name" type="text" autocomplete="off" ' +
+        'placeholder="e.g. Okafor, Ruth" value="' + esc(editClientState.name) + '">' +
+      '<label class="nc-label">Expected documents ' +
+        '<span class="nc-hint">— the forms this client owes; remove any that no longer apply</span></label>' +
+      '<div class="nc-chips" id="ec-chips"></div>' +
+      '<div class="nc-add"><input class="select nc-add-input" id="ec-add-input" type="text" ' +
+        'autocomplete="off" placeholder="Add another form…">' +
+        '<button class="btn-ghost btn-sm" id="ec-add-btn" type="button">Add</button></div>' +
+      '<div class="nc-error" id="ec-error">' + esc(editClientState.error) + '</div>' +
+      '<div class="ec-foot"><div class="ec-foot-left">' + deleteControl + '</div>' +
+        '<div class="ec-foot-right"><button class="btn-ghost btn-sm" id="ec-cancel" type="button">Cancel</button>' +
+        '<button class="btn btn-sm" id="ec-save" type="button">Save changes</button></div></div>' +
+      '</div>';
+    paintEditChips();
+    var nameEl = $("ec-name");
+    if (nameEl) {
+      nameEl.oninput = function () { editClientState.name = nameEl.value; if (editClientState.error) ecSetError(""); };
+      nameEl.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); submitEditClient(); } };
+      nameEl.focus();
+    }
+    var addInput = $("ec-add-input");
+    if (addInput) addInput.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); ecAddDoc(); } };
+    var addBtn = $("ec-add-btn"); if (addBtn) addBtn.onclick = ecAddDoc;
+    var cancel = $("ec-cancel"); if (cancel) cancel.onclick = closeEditClientForm;
+    var save = $("ec-save"); if (save) save.onclick = submitEditClient;
+    var del = $("ec-delete"); if (del) del.onclick = deleteEditClient;
+  }
+
+  function submitEditClient() {
+    var id = editClientState.id;
+    var name = (editClientState.name || "").trim();
+    if (!name) { ecSetError("Client name is required."); var nm = $("ec-name"); if (nm) nm.focus(); return; }
+    var payload = { name: name, expected_docs: editClientState.docs.slice() };
+    var btn = $("ec-save");
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    api.updateClient(id, payload).then(function (client) {
+      toast("Client updated — " + client.name);
+      closeEditClientForm();
+      renderDashboard();
+    }).catch(function (e) {
+      ecSetError("Couldn't save: " + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = "Save changes"; }
+    });
+  }
+
+  function deleteEditClient() {
+    var id = editClientState.id;
+    var name = editClientState.name || id;
+    if (!window.confirm('Delete client "' + name + '"? This cannot be undone.')) return;
+    var btn = $("ec-delete");
+    if (btn) { btn.disabled = true; btn.textContent = "Deleting…"; }
+    api.deleteClient(id).then(function () {
+      toast("Client deleted — " + name);
+      closeEditClientForm();
+      renderDashboard();
+    }).catch(function (e) {
+      // The backend guards deletion (409) if a document slipped in since the
+      // form opened; surface it instead of silently failing.
+      ecSetError("Couldn't delete: " + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = "Delete client"; }
+    });
+  }
+
   // Build a real mailto: draft chasing a client's still-missing documents.
   // Frontend-only (works offline, same in mock mode). Every interpolated value
   // is URL-encoded; body newlines are CRLF (%0D%0A after encoding). No claims
@@ -1088,7 +1255,10 @@
     return '<div class="card client-card"><div class="card-pad">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">' +
       '<div class="client-name">' + esc(c.name) + '</div>' +
-      '<div class="client-head-right">' + frac + badge + '</div></div>' +
+      '<div class="client-head-right">' +
+        '<button class="client-edit-btn" data-edit-client="' + esc(c.id) + '" ' +
+        'title="Edit client" aria-label="Edit ' + esc(c.name) + '">' + PEN_SVG + '</button>' +
+        frac + badge + '</div></div>' +
       '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
       rows +
       alsoHtml +
