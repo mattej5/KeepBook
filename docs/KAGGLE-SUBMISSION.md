@@ -38,7 +38,7 @@ That's the problem we're solving today: automating the classification without ro
 
 ### 🛠️ How we built it
 
-**Model:** Gemma 4 `e4b` (Q4_K_M, vision) running entirely on a MacBook M4 Pro through Ollama, with `e2b` as the comparison model. The backend reaches the model through a single adapter that also speaks the OpenAI-compatible local-server shape, so the runtime is swappable by env var without touching product code.
+**Model:** Gemma 4 `e4b` (vision) running entirely on a MacBook M4 Pro, with `e2b` as the comparison model. The backend reaches the model through a single adapter, so the runtime is swappable by env var without touching product code. We built and shipped on Ollama (Q4_K_M), then used that same adapter to bake off a second Mac-native runtime, Courier OS, on demo day. A quant-matched 4-bit MLX build plus a pan-and-scan image strategy took Courier past all three of our pre-declared gates, and when we applied the identical strategy back to Ollama to keep the comparison fair, Courier still won on both axes, 91.5% of fields at a 7.1s median against 82.1% at 22.7s. The full record, including what failed along the way, is in PRD §8. The demo ships Ollama.
 
 We picked the model with a kill test before building around it: the same synthetic W-2 to Gemma 4's two smallest on-device sizes, identical prompts, temperature 0. `e2b` read 5/6 fields but silently returned a wrong dollar amount for federal withholding in clean, confident JSON. `e4b` went 6/6. Reproduced three times. That one result drove both core design decisions: ship the larger model despite 2× latency, and make human review mandatory rather than optional.
 

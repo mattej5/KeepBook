@@ -1,0 +1,1219 @@
+{
+  "summary": {
+    "model": "gemma4:e4b",
+    "runtime": "ollama",
+    "docs_scored": 32,
+    "doc_type_correct": 32,
+    "doc_type_total": 32,
+    "doc_type_accuracy": 1.0,
+    "field_correct": 87,
+    "field_total": 106,
+    "field_accuracy": 0.8208,
+    "classify_only_docs": 3,
+    "silent_wrong_values": 7,
+    "flag_coverage": 0.0,
+    "flag_coverage_silent_wrong": "0/7",
+    "flag_coverage_all_errors": 0.6316,
+    "flag_coverage_all_errors_counts": "12/19",
+    "median_latency_s": 22.72,
+    "hand_ensemble_ran": false,
+    "hand_field_correct": 7,
+    "hand_field_total": 12,
+    "hand_field_accuracy": 0.5833,
+    "hand_all_fields_flagged": false,
+    "hand_median_latency_s": 25.11,
+    "ensemble_agreed_fields": 0,
+    "ensemble_disputed_fields": 0,
+    "agreement_precision": null,
+    "agreement_precision_counts": "0/0",
+    "disputed_e4b_correct_rate": null,
+    "disputed_e4b_correct_counts": "0/0"
+  },
+  "per_doc": [
+    {
+      "file": "1098_clean_01.png",
+      "latency_s": 26.68,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Tobias G. Delacroix",
+          "predicted": "Tobias G. Delacroix",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "17725.14",
+          "predicted": "$17,725.14",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Copperline Bank",
+          "predicted": "Copperline Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1098_clean_02.png",
+      "latency_s": 23.45,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Dominic D. Marchetti",
+          "predicted": "Dominic D. Marchetti",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "3959.09",
+          "predicted": "$3,959.09",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Copperline Bank",
+          "predicted": "Copperline Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1098_hand_01_filled.png",
+      "latency_s": 25.11,
+      "handwritten": true,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Celeste M. Okonkwo",
+          "predicted": "Celeste M. Okonkwo",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Wasatch Home Lending",
+          "predicted": "Wasatch Home Lending",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "11932.60",
+          "predicted": "11,932.60",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1098_photo_01.png",
+      "latency_s": 20.38,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Tobias G. Delacroix",
+          "predicted": "Tobias G. Delacroix",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "17725.14",
+          "predicted": "17,725.14",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Copperline Bank",
+          "predicted": "Copperline Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1098_photo_02.png",
+      "latency_s": 23.22,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1098",
+        "predicted": "1098",
+        "correct": true
+      },
+      "fields": {
+        "borrower_name": {
+          "expected": "Dominic D. Marchetti",
+          "predicted": "Dominic D. Marchetti",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_mortgage_interest": {
+          "expected": "3959.09",
+          "predicted": "$3,959.09",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "lender": {
+          "expected": "Copperline Bank",
+          "predicted": "Copperline Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099int_clean_01.png",
+      "latency_s": 21.0,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-INT",
+        "predicted": "1099-INT",
+        "correct": true
+      },
+      "fields": {
+        "box1_interest_income": {
+          "expected": "7706.17",
+          "predicted": "7,706.17",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Cascade Federal Bank",
+          "predicted": "Cascade Federal Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Bianca F. Okafor",
+          "predicted": "Bianca F. Okafor",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099int_clean_02.png",
+      "latency_s": 22.46,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-INT",
+        "predicted": "1099-INT",
+        "correct": true
+      },
+      "fields": {
+        "box1_interest_income": {
+          "expected": "4481.43",
+          "predicted": "4,481.43",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Union Trust Bank",
+          "predicted": "Union Trust Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Ingrid P. Kowalski",
+          "predicted": "Ingrid P. Kowalski",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099int_photo_01.png",
+      "latency_s": 22.14,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-INT",
+        "predicted": "1099-INT",
+        "correct": true
+      },
+      "fields": {
+        "box1_interest_income": {
+          "expected": "7706.17",
+          "predicted": "$7,706.17",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Cascade Federal Bank",
+          "predicted": "Cascade Federal Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Bianca F. Okafor",
+          "predicted": "Bianca F. Okafor",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099int_photo_02.png",
+      "latency_s": 24.57,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-INT",
+        "predicted": "1099-INT",
+        "correct": true
+      },
+      "fields": {
+        "box1_interest_income": {
+          "expected": "4481.43",
+          "predicted": "4,481.43",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Union Trust Bank",
+          "predicted": "Union Trust Bank",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Ingrid P. Kowalski",
+          "predicted": "Ingrid P. Kowalski",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_clean_01.png",
+      "latency_s": 22.61,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "14029.45",
+          "predicted": "14,029.45",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Granite Peak Builders LLP",
+          "predicted": "Granite Peak Builders LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Desmond L. Fitzgerald",
+          "predicted": "Desmond L Fitzgerald",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "491-02-3545",
+          "predicted": "491-02-3545",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_clean_02.png",
+      "latency_s": 21.25,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "8272.97",
+          "predicted": "8,272.97",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Thistledown Farms LLP",
+          "predicted": "Thistledown Farms LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Ezra B. Kowalski",
+          "predicted": "Ezra B Kowalski",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "47-1476565",
+          "predicted": "47-1476565",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_clean_03.png",
+      "latency_s": 21.81,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "25609.81",
+          "predicted": "25,609.81",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Coppervale Software Co.",
+          "predicted": "Coppersvale Software Co.",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Gunnar K. Abernathy",
+          "predicted": "Gunnar K Abernathy",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "486-36-9275",
+          "predicted": "486-36-9275",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_hand_01_filled.png",
+      "latency_s": 23.09,
+      "handwritten": true,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "recipient_name": {
+          "expected": "Omar T. Lindqvist",
+          "predicted": "Omar T. Lindquist",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "521-64-8837",
+          "predicted": "521-64-8837",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Redrock Media Group",
+          "predicted": "Red Rock Media Group",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_nonemployee_comp": {
+          "expected": "19847.02",
+          "predicted": "19,847.02",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_photo_01.png",
+      "latency_s": 22.7,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "14029.45",
+          "predicted": "$14,029.45",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Granite Peak Builders LLP",
+          "predicted": "Granite Peak Builders LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Desmond L. Fitzgerald",
+          "predicted": "Desmond L Fitzgerald",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "491-02-3545",
+          "predicted": "491-02-3545",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_photo_02.png",
+      "latency_s": 27.76,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "8272.97",
+          "predicted": "8,272.97",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Thistledown Farms LLP",
+          "predicted": "Thistledown Farms LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Ezra B. Kowalski",
+          "predicted": "Ezra B. Kowalski",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "47-1476565",
+          "predicted": "47-1476565",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "1099nec_photo_03.png",
+      "latency_s": 23.79,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "1099-NEC",
+        "predicted": "1099-NEC",
+        "correct": true
+      },
+      "fields": {
+        "box1_nonemployee_comp": {
+          "expected": "25609.81",
+          "predicted": "25,609.81",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "payer": {
+          "expected": "Coppervale Software Co.",
+          "predicted": "Copperville Software Co.",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_name": {
+          "expected": "Gunnar K. Abernathy",
+          "predicted": "Gunnar K Abernathy",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "recipient_tin": {
+          "expected": "486-36-9275",
+          "predicted": "486-36-9275",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "brokerage_stmt_01.png",
+      "latency_s": 11.4,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "BROKERAGE STATEMENT",
+        "predicted": "BROKERAGE STATEMENT",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "charitable_receipt_01.png",
+      "latency_s": 9.12,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "CHARITABLE RECEIPT",
+        "predicted": "CHARITABLE RECEIPT",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "k1_clean_01.png",
+      "latency_s": 26.81,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "K-1",
+        "predicted": "K-1",
+        "correct": true
+      },
+      "fields": {
+        "ordinary_income": {
+          "expected": "114563.75",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partner_name": {
+          "expected": "Rashid P. Bergstrom",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_ein": {
+          "expected": "73-8796124",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_name": {
+          "expected": "Blue Ridge Analytics Inc.",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "k1_clean_02.png",
+      "latency_s": 26.96,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "K-1",
+        "predicted": "K-1",
+        "correct": true
+      },
+      "fields": {
+        "ordinary_income": {
+          "expected": "25516.38",
+          "predicted": "25,516.38",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "partner_name": {
+          "expected": "Bianca S. Okafor",
+          "predicted": "Bianca S. Okafor",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "partnership_ein": {
+          "expected": "28-8403504",
+          "predicted": "28-8403504",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "partnership_name": {
+          "expected": "Meridian Data Systems Inc.",
+          "predicted": "Meridian Data Systems Inc.",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "k1_photo_01.png",
+      "latency_s": 21.88,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "K-1",
+        "predicted": "K-1",
+        "correct": true
+      },
+      "fields": {
+        "ordinary_income": {
+          "expected": "114563.75",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partner_name": {
+          "expected": "Rashid P. Bergstrom",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_ein": {
+          "expected": "73-8796124",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_name": {
+          "expected": "Blue Ridge Analytics Inc.",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "k1_photo_02.png",
+      "latency_s": 25.1,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "K-1",
+        "predicted": "K-1",
+        "correct": true
+      },
+      "fields": {
+        "ordinary_income": {
+          "expected": "25516.38",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partner_name": {
+          "expected": "Bianca S. Okafor",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_ein": {
+          "expected": "28-8403504",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        },
+        "partnership_name": {
+          "expected": "Meridian Data Systems Inc.",
+          "predicted": "",
+          "verdict": "missing",
+          "low_confidence": true,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "letter_01.png",
+      "latency_s": 13.96,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "UNRECOGNIZED",
+        "predicted": "UNRECOGNIZED",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "receipt_01.png",
+      "latency_s": 8.51,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "UNRECOGNIZED",
+        "predicted": "UNRECOGNIZED",
+        "correct": true
+      },
+      "fields": {}
+    },
+    {
+      "file": "w2_clean_01.png",
+      "latency_s": 22.53,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "101775.13",
+          "predicted": "101,775.13",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "10410.79",
+          "predicted": "10,410.79",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Rashid B. Bergstrom",
+          "predicted": "Rashid B. Bergstrom",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLP",
+          "predicted": "Blue Ridge Analytics LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "432-47-9397",
+          "predicted": "432-47-9397",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_clean_02.png",
+      "latency_s": 23.27,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "97262.94",
+          "predicted": "97,262.94",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "14179.97",
+          "predicted": "14,179.97",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Gunnar N. Nakamura",
+          "predicted": "Gunnar N. Nakamura",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Ironwood Manufacturing Inc.",
+          "predicted": "Ironwood Manufacturing Inc.",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "480-31-3733",
+          "predicted": "480-31-3733",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_clean_03.png",
+      "latency_s": 22.04,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "81187.24",
+          "predicted": "81,187.24",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "14906.34",
+          "predicted": "14,906.34",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Tobias D. Marchetti",
+          "predicted": "Tobias D. Marchetti",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLC",
+          "predicted": "Blue Ridge Analytics LLC",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "419-38-8904",
+          "predicted": "419-38-8904",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_hand_01_filled.png",
+      "latency_s": 27.2,
+      "handwritten": true,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "employee_name": {
+          "expected": "Priya N. Vasquez",
+          "predicted": "Priya Vasquez",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "437-88-2210",
+          "predicted": "457-88-2210",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Hollow Pine Outfitters",
+          "predicted": "Hollow Pine Outfitters 802 Timberline Rd Ogden UT 84401",
+          "verdict": "wrong",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box1_wages": {
+          "expected": "54318.77",
+          "predicted": "54,318.77",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "6204.15",
+          "predicted": "6,204.15",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_photo_01.png",
+      "latency_s": 22.73,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "101775.13",
+          "predicted": "101,775.13",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "10410.79",
+          "predicted": "10,410.79",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Rashid B. Bergstrom",
+          "predicted": "Rashid B. Bergstrom",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLP",
+          "predicted": "Blue Ridge Analytics LLP",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "432-47-9397",
+          "predicted": "432-47-9397",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_photo_02.png",
+      "latency_s": 27.67,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "97262.94",
+          "predicted": "97,262.94",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "14179.97",
+          "predicted": "14,179.97",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Gunnar N. Nakamura",
+          "predicted": "Gunnar N Nakamura",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Ironwood Manufacturing Inc.",
+          "predicted": "Ironwood Manufacturing Inc.",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "480-31-3733",
+          "predicted": "480-31-3733",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w2_photo_03.png",
+      "latency_s": 27.02,
+      "handwritten": false,
+      "classify_only": false,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-2",
+        "predicted": "W-2",
+        "correct": true
+      },
+      "fields": {
+        "box1_wages": {
+          "expected": "81187.24",
+          "predicted": "81,187.24",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "box2_fed_withheld": {
+          "expected": "14906.34",
+          "predicted": "14,906.34",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employee_name": {
+          "expected": "Tobias D. Marchetti",
+          "predicted": "Tobias D Marchetti",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "employer": {
+          "expected": "Blue Ridge Analytics LLC",
+          "predicted": "Blue Ridge Analytics LLC",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        },
+        "ssn": {
+          "expected": "419-38-8904",
+          "predicted": "419-38-8904",
+          "verdict": "correct",
+          "low_confidence": false,
+          "disputed": false
+        }
+      }
+    },
+    {
+      "file": "w9_01.png",
+      "latency_s": 2.84,
+      "handwritten": false,
+      "classify_only": true,
+      "hand_ensemble": null,
+      "doc_type": {
+        "expected": "W-9",
+        "predicted": "W-9",
+        "correct": true
+      },
+      "fields": {}
+    }
+  ]
+}
