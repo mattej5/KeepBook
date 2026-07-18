@@ -6,7 +6,22 @@ Base URL: `http://localhost:8000` (dev). All responses JSON.
 
 ## Model call (backend internal)
 
-Ollama at `http://localhost:11434/api/generate`, model `gemma4:e4b`, `temperature: 0`, image as base64 in `images[]`. See `eval/run_test.py` for the working reference call. The base URL must come from an env var (`OLLAMA_HOST`, default `http://localhost:11434`) — during dev, non-Mac machines point it at the model host over Tailscale (see README "Models"). Demo runs with the default.
+All model access goes through one adapter — `backend/model_runtime.py`, exposing `extract(image_b64: str, prompt: str) -> str`. Nothing else in the backend may hardcode a model URL. Runtime picked by env:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `MODEL_RUNTIME` | `ollama` | `ollama` or `courier` |
+| `MODEL_NAME` | `gemma4:e4b` | model tag passed through to the runtime |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama base URL — non-Mac dev machines point this at the model host over Tailscale (README "Models") |
+| `COURIER_BASE_URL` | unset | OpenAI-compatible base URL for Courier OS, e.g. `http://localhost:<port>/v1` |
+
+**ollama shape** (see `eval/run_test.py` for the verified reference call):
+`POST {OLLAMA_HOST}/api/generate` with `{"model": MODEL_NAME, "prompt": prompt, "images": [image_b64], "stream": false, "options": {"temperature": 0}}` → read `response`.
+
+**courier shape** (OpenAI-compatible chat completions):
+`POST {COURIER_BASE_URL}/chat/completions` with `{"model": MODEL_NAME, "temperature": 0, "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": "data:image/png;base64," + image_b64}}]}]}` → read `choices[0].message.content`.
+
+The eval runner (docs/EVAL.md) imports this same adapter and honors the same env vars, so eval numbers always measure the runtime that will actually demo.
 
 ## Data model
 

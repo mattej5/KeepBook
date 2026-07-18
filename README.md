@@ -27,6 +27,8 @@ Do NOT use `gemma4:cloud` (runs inference in Ollama's cloud — disqualifying fo
 
 Remote dev inference: the machine with the models runs `OLLAMA_HOST=0.0.0.0:11434 ollama serve`; other dev machines point at it over Tailscale (`http://<tailnet-name>:11434`). Demo-day inference runs entirely on the demo Mac.
 
+**Runtime switch:** the backend talks to the model only through `backend/model_runtime.py`. `MODEL_RUNTIME=ollama` (default, verified) or `MODEL_RUNTIME=courier` (any OpenAI-compatible local server, e.g. [Courier OS](https://getcourier.ai) — supported in code, claimed nowhere until it passes the kill test). Same models, same prompts, and the eval harness honors the same switch. See [docs/API.md](docs/API.md).
+
 ## The kill test
 
 Same synthetic W-2, two model sizes:

@@ -110,20 +110,20 @@ INFERRED: the two-language constraint keeps context-switching and integration su
 
 ---
 
-## 8. Model Runtime — UNRESOLVED
+## 8. Model Runtime — Dual-runtime by design
 
-This is the single most important open decision and it is **not settled**. The track disqualifies any project whose inference runs in the cloud, so the runtime choice is existential, not cosmetic.
+The track disqualifies any project whose inference runs in the cloud, so the runtime choice is existential. Rather than betting on a single runtime, the backend reaches every model through **one adapter** (`backend/model_runtime.py`): a single function `extract(image_b64, prompt) -> str`, with the runtime selected by environment variable. Neither runtime can block the other's work.
 
-**Option A — Ollama on the M4 Pro (VERIFIED, current proven fallback).**
-`gemma4:e2b`, `gemma4:e4b`, and `gemma4:12b` are pulled and confirmed working on the demo machine via a real extraction test (§7), hitting `http://localhost:11434/api/generate`. This path works today.
+**Runtime A — Ollama (VERIFIED, the default).**
+`MODEL_RUNTIME=ollama`. `gemma4:e2b`, `gemma4:e4b`, and `gemma4:12b` are pulled and confirmed working on the demo machine via a real extraction test (§9), hitting `{OLLAMA_HOST}/api/generate`. This path works today. Andrew develops against this runtime (pointing `OLLAMA_HOST` at the model host over Tailscale).
 
-**Option B — Courier OS (getcourier.ai) (UNVERIFIED).**
-An MLX-native, Mac-only local model runtime with an OpenAI-compatible HTTP API. Likely built by one of tonight's judges, which is a strong affinity signal. Because its API is OpenAI-compatible, switching the backend to call it should be a small change. What is NOT yet verified:
-- Whether it supports the exact `gemma4:e4b` variant. (ASSUMED unknown.)
-- Whether its API accepts image/vision input at all. **This is the load-bearing unknown** — the entire product is image classification, so a text-only endpoint is a hard blocker. (ASSUMED unknown.)
-- It requires installing and authenticating a dashboard account, which has not happened yet.
+**Runtime B — Courier OS (getcourier.ai) (supported in code, UNVERIFIED in practice).**
+`MODEL_RUNTIME=courier`. An MLX-native, Mac-only local model runtime with an OpenAI-compatible HTTP API — likely built by one of the judges, a real affinity signal. Because the adapter already speaks the OpenAI chat-completions shape, trying Courier is a config change on Vin's Mac, not a code change. Still not verified:
+- Whether it serves the exact `gemma4:e4b` variant. (ASSUMED unknown.)
+- Whether its API accepts image input at all — the load-bearing unknown, since the whole product is image extraction. (ASSUMED unknown.)
+- Account install/auth has not happened yet.
 
-**Decision rule (explicit):** Ship on Ollama unless and until Courier OS is installed and passes the same extraction test in §7 with equal or better results. Do not claim Courier OS as the runtime anywhere — Writeup, repo, or demo — unless that verification actually happened. As of this document, the runtime is **Ollama**.
+**Decision rule (explicit):** the adapter ships both runtimes; the honesty gate is unchanged. The demo and Writeup claim whichever runtime **passed the §9 kill test on the demo Mac**. Courier OS must pass that test with equal or better results before it is named anywhere. If both pass, demo on the better score/latency; Ollama remains the guaranteed fallback. As of this writing the verified runtime is **Ollama**.
 
 Note on the phone: Andrew's iPhone 14 loads `gemma4:e2b` in Google AI Edge Gallery but not `e4b`. That is why the phone never runs inference in this architecture — it is a capture peripheral only. All inference is on the Mac. (VERIFIED.)
 
@@ -222,7 +222,7 @@ Track: **On-Device AI with Gemma 4.** Cloud-based inference disqualifies the pro
 
 Pulled together and ranked, not buried.
 
-1. **Courier OS unresolved (biggest unknown — resolve first).** We do not yet know if it accepts image input at all, or supports `gemma4:e4b`, and the account is not set up. Until it passes the §7 extraction test, the runtime is Ollama. Do not assert Courier OS anywhere.
+1. **Courier OS image support still unverified — but no longer structural.** The dual-runtime adapter (§8) means trying Courier is an env flip on Vin's Mac, and Andrew's Ollama work is never blocked by it. Remaining risk is only the claim: until Courier passes the §9 kill test, every public statement says Ollama.
 2. **Real messy-document accuracy is unknown.** The clean-doc kill test is a best case. The eval harness (15-20 real/messy labeled docs) is not built. This is the top build item.
 3. **Phone capture tunnel is unverified end-to-end** (Vercel UI → Cloudflare Tunnel → Mac backend). Explicitly cuttable to folder-drop by tonight's internal cutoff. Not a demo blocker, but currently unproven.
 4. **Design mockup unverified against brief.** The Claude Design render could not be viewed (auth wall). §8 reflects the brief, not a confirmed render. Spot-check before final.
