@@ -30,7 +30,7 @@ No byte of client data leaves the machine. That's not a privacy preference — i
 
 ### Model stack
 
-- **Model:** Gemma 4 `e4b` (8B params, Q4_K_M, vision) — [plus `e2b` for the comparison eval]
+- **Model:** Gemma 4 `e4b` (8B params, Q4_K_M, vision), plus `e2b` for the comparison eval
 - **Runtime:** [Ollama / Courier OS — claim ONLY what passed the kill test on the demo machine, per PRD §8]
 - **Serving:** `localhost` only. The backend (Python/FastAPI) reaches the model through a single adapter (`backend/model_runtime.py`) that speaks both Ollama's native API and any OpenAI-compatible local server, selected by env var — the runtime is swappable without touching product code.
 - **Frontend:** plain HTML/CSS/JS, no build step, served as static files by the same local backend. The demo runs with Wi-Fi off.

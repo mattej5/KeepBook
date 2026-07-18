@@ -41,7 +41,7 @@ Hybrid structure per docs/USER-JOURNEY.md: 30s story cold-open → feature tour 
 
 **2:20 — Evidence**
 
-> "We didn't guess the trust model — we measured it. Same synthetic W-2 to Gemma's two smallest on-device sizes: the 2-billion model returned a wrong dollar amount for tax withheld — clean JSON, confident, indistinguishable from right. The 4-billion model got six out of six. So we built a 29-document eval — clean scans, phone photos, junk documents, and real handwriting: [doc-type accuracy], [field accuracy], and the silent-wrong-value count is the number we watch."
+> "We didn't guess the trust model — we measured it. Same synthetic W-2 to Gemma's two smallest on-device sizes: the 2-billion model returned a wrong dollar amount for tax withheld — clean JSON, confident, indistinguishable from right. The 4-billion model got six out of six. So we built a 29-document eval — clean scans, phone photos, junk documents, and real handwriting: classification twenty-nine for twenty-nine, fields 62 percent in fast mode — 92 in careful mode — and the silent-wrong-value count is the number we watch: twenty-one fast, eight careful, thirty-six for the small model."
 
 **The SSN story** [tell this one with relish — it's true and it's the whole product in 20 seconds]:
 
@@ -84,5 +84,5 @@ No, and deliberately never claims to. It organizes and verifies intake for a hum
 **"Why Gemma 4 specifically?"**
 Vision-capable at sizes that genuinely fit on-device — e4b is 8B params quantized, ~9.6GB, comfortable in 24GB unified memory with room for the OS. Native vision means no OCR pipeline. And the on-device requirement isn't a track constraint we tolerated — it's the product's entire reason to exist.
 
-**"What broke at 2 AM?"** [have a real answer ready — fill in tomorrow]
-[TODO: fill with the true story of the night's worst bug — judges love this question and honesty plays well.]
+**"What broke at 2 AM?"** [the best story we have — tell it straight]
+At 2 AM our provisional eval came back 26/26 on classification and **0 of 94 fields — for both models**. The symmetry was the tell: models don't fail identically, harnesses do. We inspected the images and found our own test-set generator had rendered full-page forms so small that, after the vision encoder downscales, the field text was illegible — the giant "W-2" title survived, hence perfect classification. And the two models failed differently in a way that proved the whole thesis: e4b returned empty strings — honestly saying "I can't read this" — while e2b hallucinated the blank forms' printed box labels as answers. Confident wrong values again, this time exposing our own test set. We wrote red tests pinning the bug, fixed the generator, regenerated all 26 images, and reran everything. Our eval's first catch wasn't the model — it was our own test set lying to us. That's why you run evals before believing anything.
