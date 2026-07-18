@@ -2,7 +2,9 @@
 
 Pinned contract between backend (Andrew) and frontend (Vin). Change only by agreement — both sides build against this.
 
-Base URL: `http://localhost:8000` (dev). All responses JSON.
+Base URL: `http://localhost:8100` (dev). All responses JSON.
+
+> Port note (Sat ~1 AM): was 8000, moved to 8100 — Courier OS's bundled CourierDB binds `localhost:8000` whenever Courier runs, and both must coexist on the demo Mac. Backend binds 8100: `uvicorn main:app --port 8100`.
 
 ## Model call (backend internal)
 
