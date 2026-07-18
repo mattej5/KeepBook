@@ -156,3 +156,35 @@ Owners: **V** = Vin, **agent** = any coding agent (with the owner reviewing).
   DoD: model warmed (one inference completed), demo docs staged, backend + frontend running, screen/adapter tested, fallback restore command in a ready terminal.
   Verify: one warm inference logged < 5 min before demo slot.
   Evidence: _none_
+
+## Phase 6 — Vin's morning product gaps (Sat AM; triage against the 1 PM freeze — small ones may ship today, rest are honest post-demo backlog)
+
+- [ ] **T60 — Dashboard content pass** (agent; SMALL, demo-visible)
+  DoD: editorial copy removed — "measured on real documents" (dashboard stats line) and "Processed on this Mac. Nothing is uploaded." (capture + review) are gone per founder direction; replaced with operational info that earns the pixels: docs-awaiting-review count, last-intake timestamp, per-client progress fractions. PRD §10 note updated so the copy change is deliberate, not drift.
+  Verify: browser screenshots of all views show no flagged phrases; new operational elements render from live data.
+  Evidence: _none_
+
+- [ ] **T61 — Identity confirmation + multi-page support in Review** (agent; MEDIUM)
+  DoD: confirm flow requires an explicit client-identity confirmation (not a silently-defaulted dropdown — "This document belongs to [client]" is an affirmative act); Document gains optional `page_number`; docs without an extractable name (continuation pages) can be assigned client + page number manually. Rationale recorded: misassignment = confidentiality incident for a tax firm — this is the human gate applied to identity.
+  Verify: confirming without an explicit client selection is blocked; a page-numbered doc round-trips through confirm and renders its page label.
+  Evidence: _none_
+
+- [ ] **T62 — CSV export** (agent; SMALL, integration story)
+  DoD: `GET /clients/{id}/export.csv` — confirmed documents with extracted+corrected field values, one row per field or per doc (pick and document); UI download link on the client card. Writeup line: "integrates with anything that imports CSV today; QuickBooks Online / TaxDome APIs are the named roadmap" — no deeper integration claims without verification.
+  Verify: export a seeded client, open the CSV, values match the confirmed state.
+  Evidence: _none_
+
+- [ ] **T63 — CRUD gap audit + delete path** (agent; MEDIUM)
+  DoD: written audit of missing essential CRUD across frontend+backend (known gaps: no document delete for erroneous ingests, no client edit/delete, no doc→client reassignment after confirm, no expected_docs checklist editing, no un-confirm/re-open); then implement at minimum DELETE /documents/{id} (removes doc + un-checks its checklist item + logs a deletion event) with a UI affordance and confirmation dialog; tests pin the delete semantics.
+  Verify: ingest a junk doc, delete it from the UI, checklist and stats reflect removal, state survives restart, test green.
+  Evidence: _none_
+
+- [ ] **T64 — Richer mock + demo data** (Sonnet agent; SMALL)
+  DoD: additional clients in frontend/mock fixtures AND an alternate seed (state.demo-big.json): 6-8 clients, several with long realistic checklists (8-12 expected docs — W-2s, multiple 1099 types, K-1, 1098, charitable receipts), varied completion states, at least one nearly-empty and one nearly-complete.
+  Verify: dashboard renders the big seed legibly (no layout breakage with long checklists); mock mode unaffected.
+  Evidence: _none_
+
+- [ ] **T65 — Classify-only document types** (agent; MEDIUM, eval-gated)
+  DoD: extend the type enum with classify-only types (`extract: false` in schema): 1099-DIV/-B/-R/-G, 1098-T/-E, 1095-A, property tax statement, charitable receipt, brokerage statement, W-9, engagement letter. These get classified + client-assigned + human-confirmed, zero field extraction — so the silent-wrong failure class cannot exist for them; they still satisfy checklist items. Risk register (recorded): larger enum = more force-fit surface (mitigation: UNRECOGNIZED discipline unchanged + mandatory confirm); new types eval-unverified (mitigation: small classify-only eval bucket, labeled UNVERIFIED until run).
+  Verify: a classify-only doc classifies, assigns, confirms, and checks its checklist item; junk still lands UNRECOGNIZED; eval bucket run or explicitly deferred with the UNVERIFIED label.
+  Evidence: _none_
