@@ -535,6 +535,36 @@ async def get_document_image(doc_id: str):
 async def confirm_document(doc_id: str, request: Request):
     body = await request.json()
     incoming = body.get("fields", {}) or {}
+
+    # Identity is the human gate. Misassigning a document to the wrong client is
+    # a confidentiality incident for a tax firm, so client identity must be an
+    # affirmative act by the reviewer — never a silently-defaulted dropdown. The
+    # affirmative "This document belongs to X" step is enforced in the Review UI
+    # (the identity control starts UNCONFIRMED even when the pipeline pre-assigned
+    # a client); the pinned /confirm contract still accepts client_id: null, so
+    # enforcement lives in the frontend rather than here. page_number lets
+    # continuation pages that carry no extractable name be filed by hand under a
+    # client + page number. Additive: omitting it preserves the existing contract.
+    page_number = body.get("page_number")
+    if page_number is not None:
+        # Accept an int or an integer-valued string/float (the frontend number
+        # input surfaces its value as a string); reject everything else — a
+        # truncated "1.5" or a stray "true" must fail loudly, not file silently.
+        valid = False
+        if isinstance(page_number, bool):
+            valid = False
+        elif isinstance(page_number, int):
+            valid = page_number >= 1
+        elif isinstance(page_number, float):
+            valid = page_number.is_integer() and page_number >= 1
+            if valid:
+                page_number = int(page_number)
+        elif isinstance(page_number, str) and page_number.strip().isdigit():
+            page_number = int(page_number.strip())
+            valid = page_number >= 1
+        if not valid:
+            raise HTTPException(400, "page_number must be an integer >= 1")
+
     with STATE_LOCK:
         doc = STATE["documents"].get(doc_id)
         if doc is None:
@@ -546,6 +576,8 @@ async def confirm_document(doc_id: str, request: Request):
             doc["doc_type"] = body["doc_type"]
         if body.get("client_id") is not None:
             doc["client_id"] = body["client_id"]
+        if page_number is not None:
+            doc["page_number"] = page_number
 
         fields = doc.get("fields", {})
         corrected_keys = []

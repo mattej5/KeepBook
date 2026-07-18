@@ -243,6 +243,30 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
   font-family: var(--font-sans); font-size: 14px; color: var(--ink);
   border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: var(--card);
 }
+.page-input { max-width: 140px; }
+
+/* ---------- Affirmative client-identity gate ---------- */
+.identity-affirm {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px !important;
+  font-weight: 500 !important; color: var(--ink) !important; cursor: pointer;
+  border: 1px solid var(--line); border-left: 3px solid var(--ink-blue);
+  border-radius: 6px; padding: 10px 12px; background: #2f5fd00a;
+}
+.identity-affirm input[type="checkbox"] { margin-top: 2px; flex: none; accent-color: var(--ink-blue); }
+.identity-affirm strong { color: var(--ink-blue); }
+.identity-alt { font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+
+/* "p. N" page-number chip shown wherever a doc is listed */
+.page-label {
+  font: 600 11px var(--font-sans); color: var(--ink-blue);
+  background: #2f5fd014; border-radius: 4px; padding: 1px 6px; margin-left: 6px;
+  vertical-align: middle; letter-spacing: .02em;
+}
+.rl-item .rl-type .page-label { font-size: 10px; }
+
+/* blocked-reason under the Confirm button */
+.detail-foot .foot-left { display: flex; flex-direction: column; gap: 3px; }
+.confirm-block-note { font-size: 11.5px; color: var(--red); font-weight: 600; }
 .unrec-banner {
   background: #f3f1e8; border: 1px solid var(--line); border-left: 3px solid var(--faint);
   border-radius: 6px; padding: 12px 14px; font-size: 13px; color: var(--muted); margin-bottom: 14px;

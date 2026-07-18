@@ -257,6 +257,9 @@
           }
           if (payload.doc_type) d.doc_type = payload.doc_type;
           if (payload.client_id) d.client_id = payload.client_id;
+          // page_number: continuation pages filed by hand round-trip through the
+          // mock the same way the backend persists them.
+          if (payload.page_number) d.page_number = payload.page_number;
           // Apply field edits: anything differing from extraction = corrected.
           var incoming = payload.fields || {};
           Object.keys(incoming).forEach(function (k) {

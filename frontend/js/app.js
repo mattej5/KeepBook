@@ -277,7 +277,7 @@
         var client = clientName(d.client_id) || "Unassigned";
         var typ = d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type;
         return '<button class="rl-item ' + (d.id === state.selectedDoc ? "active" : "") + '" data-id="' + d.id + '">' +
-          '<div class="rl-type">' + esc(typ) + '</div>' +
+          '<div class="rl-type">' + esc(typ) + pageLabel(d) + '</div>' +
           '<div class="rl-client">' + esc(client) + '</div>' + badge + '</button>';
       }).join("");
       listEl.querySelectorAll("[data-id]").forEach(function (b) {
@@ -290,6 +290,38 @@
   function clientName(id) {
     var c = state.clients.filter(function (x) { return x.id === id; })[0];
     return c ? c.name : null;
+  }
+
+  // "p. N" chip shown wherever a doc is listed (Review list + detail heading).
+  function pageLabel(doc) {
+    var pn = doc && doc.page_number;
+    return pn ? ' <span class="page-label">p. ' + esc(String(pn)) + '</span>' : '';
+  }
+
+  // Effective picks read straight off the identity controls. pickedClient does
+  // NOT fall back to doc.client_id: the model's guess is not consent, so an
+  // unconfirmed doc with a suggestion still resolves to "" until the reviewer
+  // affirms it (checkbox) or names someone else (dropdown).
+  function pickedType(doc) { var t = $("pick-type"); return t ? t.value : doc.doc_type; }
+  function pickedClient() {
+    var drop = $("pick-client");
+    if (drop && drop.value) return drop.value;
+    var affirm = $("pick-affirm");
+    if (affirm && affirm.checked) return affirm.dataset.client;
+    return "";
+  }
+
+  // Confirm stays blocked, with the reason shown, until identity is affirmed.
+  function refreshConfirmState(doc) {
+    var cb = $("confirm-btn");
+    if (!cb) return;
+    var typ = pickedType(doc);
+    var reason = "";
+    if (!typ || typ === "UNRECOGNIZED") reason = "Choose a document type first";
+    else if (!pickedClient()) reason = "Confirm the client identity first";
+    cb.disabled = !!reason;
+    var note = $("confirm-block-note");
+    if (note) note.textContent = reason;
   }
 
   function renderDetail(id) {
@@ -306,7 +338,7 @@
       var right = "";
 
       var heading = errored ? "Model unavailable" : unrec ? "Unrecognized document" : doc.doc_type;
-      right += '<h2>' + esc(heading) + '</h2>';
+      right += '<h2>' + esc(heading) + pageLabel(doc) + '</h2>';
       right += '<div class="doc-sub">' + (confirmed
         ? 'Confirmed · in ' + esc(clientName(doc.client_id) || "—") + '\'s file'
         : errored
@@ -328,13 +360,33 @@
             DOC_TYPES.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join("") +
             '</select>';
         }
-        right += '<label>Client</label><select class="select" id="pick-client">' +
-          '<option value="">Choose client…</option>' +
+        // Identity is an affirmative act, never a silent default. Misassigning a
+        // document to the wrong client is a confidentiality incident for a tax
+        // firm, so the control starts UNCONFIRMED even when the model pre-assigned
+        // a client — the reviewer must restate "this belongs to X" before Confirm
+        // enables. When there is a suggestion, that restatement is a checkbox;
+        // either way the dropdown is never pre-selected.
+        var suggested = state.clients.filter(function (c) { return c.id === doc.client_id; })[0];
+        right += '<label>Client identity</label>';
+        if (suggested) {
+          right += '<label class="identity-affirm"><input type="checkbox" id="pick-affirm" data-client="' +
+            esc(suggested.id) + '"> This document belongs to <strong>' + esc(suggested.name) + '</strong></label>' +
+            '<div class="identity-alt">Wrong client? Choose the correct one below.</div>';
+        }
+        right += '<select class="select" id="pick-client">' +
+          '<option value="">' + (suggested ? "Or file under a different client…" : "Choose client…") + '</option>' +
           state.clients.map(function (c) {
-            var sel = c.id === doc.client_id ? " selected" : "";
-            return '<option value="' + c.id + '"' + sel + '>' + esc(c.name) + '</option>';
+            // NEVER pre-selected — a defaulted selection would make identity a
+            // no-op instead of an affirmative act.
+            return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
           }).join("") +
-          '</select></div>';
+          '</select>';
+        // Page number (optional): continuation pages with no extractable name get
+        // filed by hand under a client + page number.
+        right += '<label>Page number (optional)</label>' +
+          '<input class="select page-input" id="pick-page" type="number" min="1" step="1" placeholder="e.g. 2"' +
+          (doc.page_number ? ' value="' + esc(String(doc.page_number)) + '"' : '') + '>';
+        right += '</div>';
       }
 
       // fields
@@ -374,8 +426,9 @@
           CHECK_SVG + ' Confirmed — checklist updated</div>' +
           '<button class="btn-ghost btn-sm" id="to-dash">See it on the Dashboard →</button>';
       } else {
-        right += '<div class="privacy-line">Confirming files this into the client\'s checklist.</div>' +
-          '<button class="btn btn-sm" id="confirm-btn">Confirm ' + (unrec || errored ? "document" : doc.doc_type) + '</button>';
+        right += '<div class="foot-left"><div class="privacy-line">Confirming files this into the client\'s checklist.</div>' +
+          '<div class="confirm-block-note" id="confirm-block-note"></div></div>' +
+          '<button class="btn btn-sm" id="confirm-btn" disabled>Confirm ' + (unrec || errored ? "document" : doc.doc_type) + '</button>';
       }
       right += '</div>';
 
@@ -389,6 +442,21 @@
       var cb = $("confirm-btn"); if (cb) cb.onclick = function () { doConfirm(doc); };
       var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
       var db = $("discard-btn"); if (db) db.onclick = function () { doDelete(doc); };
+      // Identity is an affirmative act: keep Confirm blocked (with a reason) until
+      // the reviewer has restated the client. Re-evaluate on every identity edit.
+      if (!confirmed) {
+        var reeval = function () { refreshConfirmState(doc); };
+        ["pick-affirm", "pick-client", "pick-type"].forEach(function (idn) {
+          var elx = $(idn); if (elx) elx.addEventListener("change", reeval);
+        });
+        // A checked affirmation and an explicit dropdown pick are mutually
+        // exclusive statements — picking a different client clears the checkbox.
+        var drop = $("pick-client");
+        if (drop) drop.addEventListener("change", function () {
+          var af = $("pick-affirm"); if (af && drop.value) af.checked = false;
+        });
+        refreshConfirmState(doc);
+      }
       // lazy-load the model trace the first time the disclosure is opened
       var det = el.querySelector(".trace-disclosure");
       if (det) det.addEventListener("toggle", function () {
@@ -431,19 +499,26 @@
   }
 
   function doConfirm(doc) {
-    var typeSel = $("pick-type");
-    var clientSel = $("pick-client");
-    var docType = typeSel ? typeSel.value : doc.doc_type;
-    var clientId = clientSel ? clientSel.value : doc.client_id;
-    if (!docType || docType === "UNRECOGNIZED") { toast("Pick a document type first"); return; }
-    if (!clientId) { toast("Pick a client first"); return; }
+    var docType = pickedType(doc);
+    var clientId = pickedClient();
+    // Backstop the disabled button: identity is the human gate, so a missing
+    // affirmation blocks the write rather than silently filing to the guess.
+    if (!docType || docType === "UNRECOGNIZED") { toast("Choose a document type first"); return; }
+    if (!clientId) { toast("Confirm the client identity first"); return; }
 
     var fields = {};
     document.querySelectorAll("[data-field]").forEach(function (inp) {
       fields[inp.dataset.field] = inp.value.trim();
     });
 
-    api.confirm(doc.id, { client_id: clientId, doc_type: docType, fields: fields }).then(function (updated) {
+    var payload = { client_id: clientId, doc_type: docType, fields: fields };
+    var pageEl = $("pick-page");
+    if (pageEl && pageEl.value.trim() !== "") {
+      var pn = parseInt(pageEl.value, 10);
+      if (!isNaN(pn) && pn >= 1) payload.page_number = pn;
+    }
+
+    api.confirm(doc.id, payload).then(function (updated) {
       // remember for the dashboard ink-in animation
       state.justConfirmed[clientId + "|" + updated.doc_type] = true;
       var anyCorrected = Object.keys(updated.fields).some(function (kk) { return updated.fields[kk].corrected; });
@@ -461,7 +536,7 @@
               ? '<span class="rl-badge unrec">Unrecognized</span>'
               : '<span class="rl-badge needs">Needs review</span>';
           return '<button class="rl-item" data-id="' + d.id + '"><div class="rl-type">' +
-            esc(d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type) + '</div>' +
+            esc(d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type) + pageLabel(d) + '</div>' +
             '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + '</button>';
         }).join("") : '<div class="rl-empty">Nothing left to review. All caught up.</div>';
         listEl.querySelectorAll("[data-id]").forEach(function (b) {
