@@ -79,10 +79,10 @@
     if (view === "review") renderReview();
     if (view === "dashboard") renderDashboard();
     if (view === "nerds") {
-      renderNerds();
+      renderNerds(true);   // animate count-up + bars only on ENTRY
       // refresh the live telemetry every 5s while this view is on screen
       state.nerdsTimer = setInterval(function () {
-        if (state.view === "nerds") renderNerds();
+        if (state.view === "nerds") renderNerds(false);   // silent refresh — no re-animation
         else { clearInterval(state.nerdsTimer); state.nerdsTimer = null; }
       }, 5000);
     }
@@ -685,7 +685,7 @@
   }
 
   /* ================= STATS FOR NERDS ================= */
-  function renderNerds() {
+  function renderNerds(animate) {
     api.getTimeline(24).then(function (t) {
       var tt = t.totals;
       var pct = function (x) { return (x * 100).toFixed(1) + "%"; };
@@ -721,7 +721,9 @@
       var bars = t.buckets.map(function (b, i) {
         var h = Math.max(4, Math.round(b.docs / max * 64));
         var recent = i >= t.buckets.length - 3;
-        return '<div class="bar' + (recent ? " recent" : "") + '" style="height:' + h + 'px" title="' +
+        var grow = animate ? " bar-grow" : "";
+        var delay = animate ? ";animation-delay:" + (i * 18) + "ms" : "";
+        return '<div class="bar' + (recent ? " recent" : "") + grow + '" style="height:' + h + 'px' + delay + '" title="' +
           esc(localHour(i)) + ' — ' + b.docs + ' doc' + (b.docs === 1 ? "" : "s") +
           (b.corrections ? ", " + b.corrections + " correction" + (b.corrections === 1 ? "" : "s") : "") + '"></div>';
       }).join("");
@@ -751,8 +753,35 @@
         '<span class="hand-note" style="font-size:17px">the red-pen rate is the number to watch</span></div>';
 
       $("nerds-body").innerHTML = html;
+      if (animate) countUpTiles($("nerds-body"));
     }).catch(function (e) {
       $("nerds-body").innerHTML = '<div class="rl-empty">Timeline unavailable (' + esc(e.message) + '). Needs backend /stats/timeline or mock mode.</div>';
+    });
+  }
+
+  // rAF count-up for headline tiles — parses the numeric lead of each tile,
+  // preserving its suffix (%, s) and decimal places. Entry-only (guarded by the
+  // caller) and self-guards prefers-reduced-motion so it never fights the CSS switch.
+  function countUpTiles(root) {
+    if (!root) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    root.querySelectorAll(".tile-num").forEach(function (el) {
+      var m = /^(\d+(?:\.\d+)?)(.*)$/.exec(el.textContent.trim());
+      if (!m) return;
+      var target = parseFloat(m[1]);
+      if (!isFinite(target) || target <= 0) return;
+      var suffix = m[2] || "";
+      var decimals = (m[1].split(".")[1] || "").length;
+      var dur = 500, start = null;
+      el.textContent = (0).toFixed(decimals) + suffix;
+      requestAnimationFrame(function frame(ts) {
+        if (start === null) start = ts;
+        var p = Math.min(1, (ts - start) / dur);
+        var eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = (target * eased).toFixed(decimals) + suffix;
+        if (p < 1) requestAnimationFrame(frame);
+        else el.textContent = target.toFixed(decimals) + suffix;
+      });
     });
   }
 
