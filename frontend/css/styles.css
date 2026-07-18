@@ -31,6 +31,7 @@
   --shadow-card: 0 1px 0 #1c2a3a0a, 0 18px 40px -18px #1c2a3a73, 0 4px 12px -6px #1c2a3a33;
   --shadow-soft: 0 1px 0 #1c2a3a0a, 0 4px 12px -6px #1c2a3a33;
   --radius: 10px;
+  --rail-w: 212px;
 }
 
 * { box-sizing: border-box; }
@@ -48,6 +49,8 @@ body {
     linear-gradient(90deg, #e4e6dd 1px, transparent 1px);
   background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
   -webkit-font-smoothing: antialiased;
+  /* clear the fixed left rail; main centers within the remaining space */
+  padding-left: var(--rail-w);
 }
 
 a { color: var(--ink-blue); text-decoration: none; }
@@ -55,14 +58,14 @@ a:hover { color: var(--ink-blue-dk); }
 
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* ---------- App shell ---------- */
+/* ---------- App shell: fixed left rail (the ledger's cover/margin) ---------- */
 .app-header {
-  display: flex; align-items: center; gap: 20px;
-  padding: 14px 28px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(247, 245, 238, 0.85);
-  backdrop-filter: blur(4px);
-  position: sticky; top: 0; z-index: 20;
+  display: flex; flex-direction: column; align-items: stretch; gap: 16px;
+  padding: 20px 14px 18px;
+  border-right: 1px solid var(--line);
+  background: var(--card);
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--rail-w); z-index: 20;
 }
 .wordmark {
   font-family: var(--font-hand);
@@ -73,7 +76,7 @@ a:hover { color: var(--ink-blue-dk); }
 
 /* Logo slot: text wordmark is the default; a dropped assets/logo.svg supersedes it.
    img stays hidden until it actually loads, so no broken-image box ever flashes. */
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 2px 12px 6px; }
 .brand-logo { display: none; height: 34px; width: auto; }
 .brand-logo.loaded { display: block; }
 .brand-logo.loaded ~ .wordmark { display: none; }
@@ -83,19 +86,29 @@ a:hover { color: var(--ink-blue-dk); }
 .brand-mark.loaded { display: block; }
 .brand-mark.loaded ~ .brand-logo.loaded { margin-left: -2px; }
 
-.nav { display: flex; gap: 6px; margin-left: 8px; }
+.nav { display: flex; flex-direction: column; gap: 4px; margin-left: 0; }
 .nav button {
+  position: relative;
   font-family: var(--font-sans);
   font-size: 13.5px; font-weight: 600;
   color: var(--muted);
   background: none; border: none; cursor: pointer;
-  padding: 8px 14px; border-radius: 8px;
+  text-align: left; width: 100%;
+  padding: 9px 12px; border-radius: 8px;
   transition: background .15s, color .15s;
 }
 .nav button:hover { background: #00000008; color: var(--ink); }
 .nav button.active { color: var(--ink-blue); background: #2f5fd014; }
+/* bookmark-ribbon left edge on the active row */
+.nav button.active::before {
+  content: ""; position: absolute; left: 0; top: 5px; bottom: 5px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--ink-blue);
+}
 
 .header-spacer { flex: 1; }
+
+/* bottom-pinned group: on-device badge + reset control */
+.rail-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 0 12px; }
 
 .ondevice {
   font-size: 11px; font-weight: 600; color: var(--ink-blue);
@@ -105,6 +118,26 @@ a:hover { color: var(--ink-blue-dk); }
 .reset-link {
   font-size: 11px; color: var(--faint); background: none; border: none;
   cursor: pointer; text-decoration: underline; padding: 4px;
+}
+
+/* Narrow window: rail collapses back to a horizontal top bar (safety net —
+   the demo runs full-screen, this just keeps a squeezed window from breaking). */
+@media (max-width: 860px) {
+  body { padding-left: 0; }
+  .app-header {
+    flex-direction: row; align-items: center; gap: 20px;
+    padding: 14px 28px;
+    border-right: none; border-bottom: 1px solid var(--line);
+    background: rgba(247, 245, 238, 0.85);
+    backdrop-filter: blur(4px);
+    position: sticky; top: 0; left: auto; bottom: auto;
+    width: auto;
+  }
+  .brand { padding: 0; }
+  .nav { flex-direction: row; gap: 6px; margin-left: 8px; }
+  .nav button { width: auto; text-align: center; padding: 8px 14px; }
+  .nav button.active::before { display: none; }
+  .rail-foot { flex-direction: row; align-items: center; gap: 12px; padding: 0; }
 }
 
 /* ---------- Layout ---------- */
