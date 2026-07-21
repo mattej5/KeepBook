@@ -9,3 +9,7 @@ pytest==9.0.3
 opencv-python-headless==4.11.0.86
 Pillow==12.3.0
 numpy==2.5.1
+# PDF intake (backend/pdf_render.py): render each PDF page to a PNG server-side.
+# BSD-3-Clause / Apache-2.0 (verified from installed package metadata) — NOT
+# PyMuPDF, which is AGPL.
+pypdfium2==5.12.1
