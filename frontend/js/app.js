@@ -1400,10 +1400,22 @@
     el = document.createElement("div");
     el.id = "nudge-overlay";
     el.className = "nudge-overlay";
-    el.hidden = true;
     document.body.appendChild(el);
     el.addEventListener("click", function (e) { if (e.target === el) closeNudgeModal(); });
     return el;
+  }
+
+  // Close = REMOVE the overlay node from the DOM, never hide it. The first
+  // ship relied on el.hidden, but the `hidden` attribute only maps to the UA
+  // stylesheet's [hidden]{display:none}, and our own author rule
+  // .nudge-overlay{display:flex} overrides UA declarations — so the "hidden"
+  // overlay stayed a full-viewport z-index-60 click shield and froze the app
+  // (found in the coordinator's real-browser pass). Removal is synchronous
+  // (no close fade, so no transitionend to miss) and ensureNudgeOverlay
+  // recreates a fresh node on the next open.
+  function removeNudgeOverlay() {
+    var el = $("nudge-overlay");
+    if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
   function nudgeEscHandler(e) { if (e.key === "Escape") closeNudgeModal(); }
@@ -1428,14 +1440,14 @@
   function closeNudgeModal() {
     nudgeState = { open: false, clientId: null, clientName: "", loading: false, error: "", result: null };
     document.removeEventListener("keydown", nudgeEscHandler);
-    var el = $("nudge-overlay");
-    if (el) { el.hidden = true; el.innerHTML = ""; }
+    removeNudgeOverlay();
   }
 
   function paintNudgeModal() {
+    // Closed -> make sure no overlay node exists at all (self-healing even if
+    // a stray late repaint lands after close), and never create one.
+    if (!nudgeState.open) { removeNudgeOverlay(); return; }
     var overlay = ensureNudgeOverlay();
-    if (!nudgeState.open) { overlay.hidden = true; overlay.innerHTML = ""; return; }
-    overlay.hidden = false;
 
     var body;
     if (nudgeState.loading) {

@@ -634,6 +634,12 @@ main:has(#view-dashboard.active) { max-width: 1320px; }
   display: flex; align-items: center; justify-content: center; padding: 24px;
   animation: fade .15s ease;
 }
+/* Belt-and-braces: the author display:flex above would otherwise override the
+   UA [hidden]{display:none} rule, leaving a "hidden" overlay as an invisible
+   full-viewport click shield. Close removes the node outright (app.js
+   removeNudgeOverlay), but if any code path ever sets hidden instead, make it
+   actually hide. */
+.nudge-overlay[hidden] { display: none; }
 .nudge-modal {
   background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-card);
   width: 100%; max-width: 560px; max-height: 86vh; overflow: auto;
