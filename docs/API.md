@@ -45,7 +45,7 @@ The eval runner (docs/EVAL.md) imports this same adapter and honors the same env
             | "brokerage statement" | "W-9" | "engagement letter" | "UNRECOGNIZED",
   "image_path": "uploads/doc_001.png",
   "received_at": "2026-07-18T09:14:02Z",   // OPTIONAL — set at intake; frontend shows "Received Jul 18" if present
-  "phash": "a1b2…(64 hex chars)",         // OPTIONAL (additive) — 256-bit dHash (17x16 grid) as 64 hex chars, computed at intake. Absent on pre-feature docs; legacy 16-hex (64-bit era) values are lazily recomputed from the stored image at the next intake, or skipped if the image is gone.
+  "phash": "a1b2…(64 hex chars)",         // OPTIONAL (additive) — 256-bit dHash (17x16 grid) as 64 hex chars, computed at intake. ABSENT phash (pre-feature/seed docs) and legacy 16-hex (64-bit era) values are both lazily recomputed from the stored image at the next intake comparison, or skipped if the image is gone.
   "duplicate_of": null,                    // OPTIONAL (additive) — doc_id this was flagged a near/exact duplicate of, or null. See "Duplicate detection".
   "source": "folder",                      // OPTIONAL (additive) — "folder" iff ingested by the watched-inbox thread; ABSENT for normal uploads (absent == "upload"). See "Watched intake folder".
   "page_number": 2,                        // OPTIONAL (additive) — 1-based page for a page rendered from a PDF (set at intake), or filed by hand at confirm. Absent otherwise. See "PDF intake".
@@ -202,10 +202,14 @@ doc still runs the normal classify/extract pipeline; the existing doc is untouch
 > by design the tradeoff never puts a false flag in front of the reviewer.
 
 **Legacy phash migration.** State files written by the 64-bit scheme carry 16-hex
-`phash` values. On the next intake comparison the backend recomputes those from the
-doc's stored upload (persisted in place); a doc whose image is unreadable/gone is
-skipped for comparison. A length mismatch is never compared directly — never a
-crash, never a false flag.
+`phash` values, and pre-feature state files (e.g. the demo seed) carry NO `phash`
+key at all. Both cases migrate the same way: on the next intake comparison the
+backend recomputes the phash from the doc's stored upload (persisted in place); a
+doc whose image is unreadable/gone is skipped for comparison. A length mismatch is
+never compared directly — never a crash, never a false flag. This matters for the
+exact-re-drop case too: the sha256 index is restart-ephemeral by design, so a
+double-drop of a seeded doc is caught by the recomputed perceptual path (distance
+0 + identical pixels), not by the index.
 
 **Resolving.** `POST /documents/{id}/resolve-duplicate {"action":"keep"}` clears
 `duplicate_of` (sets null), persists, and appends a `dup_resolved` event. A doc

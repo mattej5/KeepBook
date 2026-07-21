@@ -519,12 +519,16 @@ def _detect_duplicate_locked(sha: str, phash: str, data: bytes) -> str:
     form" (flag) apart from "different person's same-type form" (no flag) — the
     hash alone cannot (both sit at distance 0 on template forms).
 
-    Migration: a doc whose stored phash length differs from the current scheme
-    (legacy 64-bit state files) gets its phash recomputed here from its stored
-    upload when readable — persisted by the caller's _persist_locked — else it is
-    skipped for comparison (find_candidates drops length mismatches; never a
-    crash, never a false flag). The new document is NOT in STATE yet, so it can
-    never match itself.
+    Migration: a doc whose stored phash is ABSENT (pre-feature state files, e.g.
+    the demo seed) or whose length differs from the current scheme (legacy 64-bit
+    state files) gets its phash recomputed here from its stored upload when
+    readable — persisted by the caller's _persist_locked — else it is skipped for
+    comparison (find_candidates additionally drops any length mismatch; never a
+    crash, never a false flag). Without the absent-phash arm, every seeded doc is
+    invisible to dup detection and a double-drop of a seeded image goes unflagged
+    (SHA_INDEX is restart-ephemeral by design, so it cannot save the exact-match
+    case either). The new document is NOT in STATE yet, so it can never match
+    itself.
     """
     exact_id = SHA_INDEX.get(sha)
     if exact_id and exact_id in STATE["documents"]:
@@ -532,13 +536,13 @@ def _detect_duplicate_locked(sha: str, phash: str, data: bytes) -> str:
     candidates = []
     for did, d in STATE["documents"].items():
         ph = d.get("phash")
-        if ph and len(ph) != dedup.PHASH_HEX_LEN:
+        if not ph or len(ph) != dedup.PHASH_HEX_LEN:
             recomputed = dedup.dhash_from_file(_abs_image_path(d))
             if recomputed:
                 d["phash"] = recomputed  # lazy upgrade, persisted with this intake
                 ph = recomputed
             else:
-                continue  # unreadable legacy doc: skip, never false-flag
+                continue  # absent/legacy phash + unreadable image: skip, never false-flag
         candidates.append((did, ph))
     for did, _dist in dedup.find_candidates(phash, candidates):
         doc = STATE["documents"].get(did)

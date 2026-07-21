@@ -273,11 +273,15 @@ def test_phash_and_duplicate_of_survive_restart(api):
 def test_old_state_file_without_new_fields_still_loads(api):
     module, client, root = api
     # A pre-feature state file: a confirmed doc with NO phash / duplicate_of keys.
+    # image_path deliberately points at a file that NEVER exists in this suite so
+    # the absent-phash recompute deterministically fails and the doc is skipped
+    # for comparison (the recompute-success path is pinned by the dedicated
+    # pre-feature tests below).
     legacy = {
         "documents": {
             "doc_001": {
                 "id": "doc_001", "client_id": None, "status": "confirmed",
-                "doc_type": "W-2", "image_path": "uploads/doc_001.png",
+                "doc_type": "W-2", "image_path": "uploads/legacy_never_written.png",
                 "received_at": "2026-07-01T00:00:00Z", "fields": {},
             }
         },
@@ -292,8 +296,8 @@ def test_old_state_file_without_new_fields_still_loads(api):
     doc = resp.json()
     assert doc["id"] == "doc_001"
     assert doc.get("duplicate_of") is None  # absent key reads as no flag
-    # A new distinct-type upload against the legacy (phash-less) doc must not crash
-    # and must not be flagged (the legacy doc has no phash to compare against).
+    # A new distinct-type upload against the legacy (phash-less, image-less) doc
+    # must not crash and must not be flagged.
     new_id = _intake(fresh_client, "new.png", DISTINCT_IMG.read_bytes()).json()["queued"][0]
     assert fresh_client.get(f"/documents/{new_id}").json()["duplicate_of"] is None
 
@@ -351,3 +355,64 @@ def test_legacy_phash_with_missing_image_is_skipped_never_crashes_or_false_flags
 
     assert client.get(f"/documents/{new_id}").json()["duplicate_of"] is None
     assert client.get("/documents/doc_001").json()["phash"] == "0123456789abcdef"
+
+
+def test_prefeature_doc_without_phash_key_flags_redrop_after_restart(api):
+    """Coordinator integration pin (seed-state gap): a PRE-FEATURE doc has NO
+    phash key at all — not a legacy-length one. After a restart-load (SHA_INDEX
+    empty by design), an exact re-drop of its image bytes must still be flagged:
+    the absent phash is recomputed from the stored image at comparison time and
+    persisted, and the perceptual path (distance 0 + stage-2 identical) covers
+    what the restart-ephemeral exact-match index cannot."""
+    module, client, root = api
+    import dedup
+
+    uploads = root / "uploads"
+    uploads.mkdir(exist_ok=True)
+    shutil.copyfile(BASE_IMG, uploads / "doc_001.png")
+    prefeature = {
+        "documents": {
+            "doc_001": {
+                "id": "doc_001", "client_id": None, "status": "confirmed",
+                "doc_type": "W-2", "image_path": "uploads/doc_001.png",
+                "received_at": "2026-07-01T00:00:00Z", "fields": {},
+                # deliberately NO phash / duplicate_of keys (pre-feature seed)
+            }
+        },
+        "clients": {}, "seq_doc": 1, "seq_client": 0,
+    }
+    Path(module.STATE_PATH).write_text(json.dumps(prefeature))
+
+    fresh = _fresh_app_from_disk(module, root)
+    fresh_client = TestClient(fresh.app)
+    new_id = _intake(fresh_client, "redrop.png", BASE_IMG.read_bytes()).json()["queued"][0]
+
+    assert fresh_client.get(f"/documents/{new_id}").json()["duplicate_of"] == "doc_001"
+    # The pre-feature doc's recomputed phash is persisted to disk.
+    persisted = json.loads(Path(module.STATE_PATH).read_text())
+    assert len(persisted["documents"]["doc_001"]["phash"]) == dedup.PHASH_HEX_LEN
+
+
+def test_prefeature_doc_with_missing_image_is_skipped_never_crashes(api):
+    """Absent phash + unreadable image: the doc cannot be hashed, so it is
+    skipped for comparison — intake succeeds, nothing is flagged, no crash, and
+    the doc still carries no phash."""
+    module, client, root = api
+    prefeature = {
+        "documents": {
+            "doc_001": {
+                "id": "doc_001", "client_id": None, "status": "confirmed",
+                "doc_type": "W-2", "image_path": "uploads/long_gone.png",
+                "received_at": "2026-07-01T00:00:00Z", "fields": {},
+            }
+        },
+        "clients": {}, "seq_doc": 1, "seq_client": 0,
+    }
+    Path(module.STATE_PATH).write_text(json.dumps(prefeature))
+
+    fresh = _fresh_app_from_disk(module, root)
+    fresh_client = TestClient(fresh.app)
+    new_id = _intake(fresh_client, "new.png", BASE_IMG.read_bytes()).json()["queued"][0]
+
+    assert fresh_client.get(f"/documents/{new_id}").json()["duplicate_of"] is None
+    assert "phash" not in fresh_client.get("/documents/doc_001").json()
