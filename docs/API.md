@@ -47,6 +47,7 @@ The eval runner (docs/EVAL.md) imports this same adapter and honors the same env
   "received_at": "2026-07-18T09:14:02Z",   // OPTIONAL — set at intake; frontend shows "Received Jul 18" if present
   "phash": "a1b2c3d4e5f60718",            // OPTIONAL (additive) — 64-bit dHash as 16 hex chars, computed at intake. Absent on pre-feature docs.
   "duplicate_of": null,                    // OPTIONAL (additive) — doc_id this was flagged a near/exact duplicate of, or null. See "Duplicate detection".
+  "source": "folder",                      // OPTIONAL (additive) — "folder" iff ingested by the watched-inbox thread; ABSENT for normal uploads (absent == "upload"). See "Watched intake folder".
   "fields": {                          // extracted; keys vary by doc_type
     // per-field OPTIONAL "low_confidence": true — backend sets it from honest deterministic signals
     // (model needed a retry, value empty, or format check failed e.g. SSN/EIN/TIN pattern, non-numeric money).
@@ -207,6 +208,52 @@ types and is unchanged):
 ```jsonc
 {"ts": "2026-07-20T09:14:05Z", "type": "dup_flagged", "doc_id": "doc_008", "duplicate_of": "doc_007"}
 {"ts": "2026-07-20T09:15:12Z", "type": "dup_resolved", "doc_id": "doc_008", "action": "keep"}
+```
+
+## Watched intake folder (Phase 2, Tier A #3)
+
+Ambient autonomy: point KeepBook at a folder and any image dropped there (AirDrop,
+Finder copy, a scanner's output dir) is ingested unprompted — no manual upload.
+
+**Enabling.** Set the env var `KEEPBOOK_INBOX=/path/to/folder`. **Unset (default) =
+feature fully off, zero behavior change.** Set = the folder is created at startup if
+missing (parents ok) and a stdlib polling thread (~2 s interval, no new
+dependencies, no `watchdog`/`fswatch`) watches it for the life of the process.
+`GET /health` reports the resolved path as `"inbox"` (or `null` when off).
+
+**Eligibility.** Top-level, non-hidden files with extension `png` / `jpg` / `jpeg`
+/ `webp` (case-insensitive) only. This is intentionally narrower than the upload
+set — `gif`/`bmp`, dotfiles, and subdirectories (no recursion) are ignored silently
+(a log line only, never a document).
+
+**Partial-write safety.** A file is ingested only once its `(size, mtime)` is
+**stable across two consecutive polls**, so a file still being written (mid-AirDrop)
+is left alone until it settles.
+
+**Ingestion path.** Eligible, stable files run through the **same code path as
+`POST /intake`** — the same zero-byte/undecodable rejection, dHash/sha256 hashing,
+`duplicate_of` flagging, and queueing. The original file is **COPIED** into
+`uploads/` and is **never moved, deleted, or renamed**; the watcher is strictly
+read-and-copy. A doc created this way carries `"source": "folder"`.
+
+**Re-ingest protection.** Handled files are remembered by **content sha256** in
+`state.json` under the additive key `inbox_seen`. Consequences: a **restart** never
+re-ingests; the **same bytes under a new filename** are skipped; a **new file that
+reuses an old name but has different content** still ingests. A rejected
+(zero-byte/undecodable) file is remembered too, so it is not retried forever — it is
+logged, recorded, and skipped. Old state files without `inbox_seen` load fine
+(defaults to empty).
+
+**Resilience.** The scan loop is wrapped defensively — a permissions flip, a
+vanished folder, or any per-file IO fault is logged and swallowed, so the watcher
+never takes down the server.
+
+**Events** (appended to `events.jsonl`; additive — `/stats/timeline` ignores unknown
+types and is unchanged):
+
+```jsonc
+{"ts": "2026-07-20T09:14:05Z", "type": "inbox_ingested", "doc_id": "doc_009"}
+{"ts": "2026-07-20T09:14:07Z", "type": "inbox_rejected", "name": "blank.png", "error": "empty upload (zero bytes)"}
 ```
 
 ## Event log (stretch tier — Stats for Nerds)
