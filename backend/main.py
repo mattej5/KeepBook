@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
+import dedup
 import pipeline
 from model_runtime import generate_text as model_generate_text
 
@@ -75,6 +76,15 @@ STATE = {
 }
 QUEUE = []             # pending doc ids awaiting processing
 PROCESSING = None      # id currently being processed, or None
+
+# Session-scoped exact-match index for duplicate detection: sha256 -> doc_id.
+# In-memory only (never persisted — would change the pinned Document shape) and
+# liveness-checked at lookup, so a stale entry pointing at a deleted/absent doc is
+# harmless and just falls through to the perceptual (dHash) comparison. After a
+# restart it starts empty; a byte-identical re-upload is still flagged because a
+# literal duplicate has dHash distance 0, and phash IS persisted. Cleared in
+# _load_state (fresh process semantics).
+SHA_INDEX = {}
 
 # Config stamp for /health — resolved once at startup (docs/IMPROVEMENTS.md #12).
 STARTED_AT = None
@@ -128,6 +138,9 @@ def _load_state() -> None:
         if doc.get("status") == "pending"
     ]
     PROCESSING = None
+    # Fresh process: the exact-match index does not survive a restart (dedup still
+    # works via persisted phash — a literal duplicate is dHash distance 0).
+    SHA_INDEX.clear()
     if QUEUE:
         WAKE.set()
 
@@ -409,11 +422,35 @@ async def health():
 
 
 # ---------------------------- Intake ---------------------------------------
-async def _save_bytes(data: bytes, orig_name: str) -> dict:
-    """Create a pending Document from raw image bytes. Caller holds lock."""
+def _detect_duplicate_locked(sha: str, phash: str) -> str:
+    """Nearest non-deleted duplicate of a new image, or None. Caller holds lock.
+
+    Exact path: sha256 hit in SHA_INDEX (verified still live). Perceptual path:
+    nearest existing doc within dedup.THRESHOLD Hamming distance of the dHash. The
+    new document is NOT in STATE yet, so it can never match itself.
+    """
+    exact_id = SHA_INDEX.get(sha)
+    if exact_id and exact_id in STATE["documents"]:
+        return exact_id
+    dup_of, _dist = dedup.find_duplicate(
+        phash,
+        ((did, d.get("phash")) for did, d in STATE["documents"].items()),
+    )
+    return dup_of
+
+
+async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict:
+    """Create a pending Document from raw image bytes. Caller holds lock.
+
+    sha/phash are precomputed by the intake validator (dedup.compute_hashes),
+    which already rejected zero-byte/undecodable uploads before any doc is made.
+    The new doc carries its dHash (phash) and duplicate_of (nearest existing
+    match, or null); it still runs the normal pipeline either way.
+    """
     ext = os.path.splitext(orig_name or "")[1].lower()
     if ext not in IMAGE_EXTS:
         ext = ".png"
+    duplicate_of = _detect_duplicate_locked(sha, phash)
     doc_id = _next_doc_id()
     rel_path = os.path.join("uploads", f"{doc_id}{ext}")
     with open(os.path.join(BASE_DIR, rel_path), "wb") as fh:
@@ -427,16 +464,32 @@ async def _save_bytes(data: bytes, orig_name: str) -> dict:
         "received_at": _now_iso(),
         "fields": {},
         "source_name": orig_name or None,
+        "phash": phash,
+        "duplicate_of": duplicate_of,
     }
     STATE["documents"][doc_id] = doc
     QUEUE.append(doc_id)
+    SHA_INDEX[sha] = doc_id
     return doc
+
+
+def _hash_or_400(data: bytes, label: str):
+    """Compute (sha256, dHash) or raise HTTP 400 for a zero-byte/undecodable image.
+
+    IMPROVEMENTS #14: a zero-byte or non-image upload is rejected here, BEFORE any
+    document is created — the intake never silently accepts an unreadable file.
+    """
+    try:
+        return dedup.compute_hashes(data)
+    except dedup.UnreadableImage as exc:
+        raise HTTPException(400, f"{label}: {exc}")
 
 
 @app.post("/intake")
 async def intake(request: Request):
     ct = request.headers.get("content-type", "")
     queued = []
+    flagged = []  # (doc_id, duplicate_of) pairs to log after the state write
 
     if ct.startswith("application/json"):
         body = await request.json()
@@ -450,12 +503,20 @@ async def intake(request: Request):
         )
         if not names:
             raise HTTPException(400, f"no images in folder: {folder!r}")
+        # Read + validate + hash every file BEFORE any doc is created, so one bad
+        # image fails the whole request cleanly instead of leaving half a batch.
+        prepared = []
+        for n in names:
+            with open(os.path.join(folder, n), "rb") as fh:
+                data = fh.read()
+            sha, phash = _hash_or_400(data, n)
+            prepared.append((data, n, sha, phash))
         with STATE_LOCK:
-            for n in names:
-                with open(os.path.join(folder, n), "rb") as fh:
-                    data = fh.read()
-                doc = await _save_bytes(data, n)
+            for data, n, sha, phash in prepared:
+                doc = await _save_bytes(data, n, sha, phash)
                 queued.append(doc["id"])
+                if doc.get("duplicate_of"):
+                    flagged.append((doc["id"], doc["duplicate_of"]))
             _persist_locked()
     else:
         form = await request.form()
@@ -481,12 +542,24 @@ async def intake(request: Request):
                     f"unsupported file type {ext or '(none)'!r} for {up.filename!r}; "
                     "images only (png, jpg, jpeg, webp, gif, bmp)",
                 )
+        # Read + validate + hash every upload before creating any doc (see above).
+        prepared = []
+        for up in uploads:
+            data = await up.read()
+            sha, phash = _hash_or_400(data, up.filename or "(unnamed)")
+            prepared.append((data, up.filename, sha, phash))
         with STATE_LOCK:
-            for up in uploads:
-                data = await up.read()
-                doc = await _save_bytes(data, up.filename)
+            for data, name, sha, phash in prepared:
+                doc = await _save_bytes(data, name, sha, phash)
                 queued.append(doc["id"])
+                if doc.get("duplicate_of"):
+                    flagged.append((doc["id"], doc["duplicate_of"]))
             _persist_locked()
+
+    # Append a dup_flagged event per near/exact duplicate (additive; the timeline
+    # aggregation ignores unknown event types, so /stats/timeline is unaffected).
+    for doc_id, dup_of in flagged:
+        _append_event({"type": "dup_flagged", "doc_id": doc_id, "duplicate_of": dup_of})
 
     WAKE.set()
     return {"queued": queued}
@@ -697,6 +770,13 @@ async def delete_document(doc_id: str):
         if doc_id in QUEUE:
             QUEUE.remove(doc_id)
 
+        # Clear dangling duplicate_of references: any doc that flagged THIS doc as
+        # its original just lost its target, so drop the flag (set null) — a
+        # duplicate_of must never point at a document that no longer exists.
+        for other in STATE["documents"].values():
+            if other.get("duplicate_of") == doc_id:
+                other["duplicate_of"] = None
+
         # Un-check the client's checklist item only if this was the last confirmed
         # document of its type for that client (count-aware). Shared with unconfirm.
         if was_confirmed:
@@ -750,6 +830,40 @@ async def unconfirm_document(doc_id: str):
         final = json.loads(json.dumps(doc))  # snapshot for use outside the lock
 
     _append_event({"type": "unconfirmed", "doc_id": doc_id, "doc_type": doc_type})
+    return final
+
+
+@app.post("/documents/{doc_id}/resolve-duplicate")
+async def resolve_duplicate(doc_id: str, request: Request):
+    """Human verdict on a flagged near/exact duplicate: keep it (not a dup).
+
+    Body {"action": "keep"} clears duplicate_of (sets null), persists, and appends
+    a dup_resolved event. To DISCARD the extra copy instead, the caller uses the
+    existing DELETE /documents/{id} — there is no second delete path here. Unknown
+    action -> 400; unknown id -> 404. A doc that carries no flag is a NO-OP 200
+    (returns the doc unchanged, appends no event) so a double-click or a stale UI
+    is idempotent and safe (documented in docs/API.md).
+    """
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        body = {}
+    action = (body or {}).get("action")
+    if action != "keep":
+        raise HTTPException(400, 'action must be "keep"')
+
+    with STATE_LOCK:
+        doc = STATE["documents"].get(doc_id)
+        if doc is None:
+            raise HTTPException(404, f"no document {doc_id}")
+        if not doc.get("duplicate_of"):
+            # No flag to clear — idempotent no-op. Nothing changed, so no event.
+            return copy.deepcopy(doc)
+        doc["duplicate_of"] = None
+        _persist_locked()
+        final = json.loads(json.dumps(doc))  # snapshot for use outside the lock
+
+    _append_event({"type": "dup_resolved", "doc_id": doc_id, "action": "keep"})
     return final
 
 

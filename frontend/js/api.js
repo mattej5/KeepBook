@@ -77,6 +77,15 @@
       unconfirm: function (id) {
         return j("/documents/" + id + "/unconfirm", { method: "POST" });
       },
+      // Duplicate-submission resolution: {"action":"keep"} clears the flag (keeps
+      // this copy). Discarding the copy uses deleteDocument (the existing DELETE).
+      resolveDuplicate: function (id) {
+        return j("/documents/" + id + "/resolve-duplicate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "keep" })
+        });
+      },
       getTimeline: function (hours) { return j("/stats/timeline?hours=" + (hours || 24)); },
       getRuns: function (limit) { return j("/runs?limit=" + (limit || 20)); },
       getNudge: function (clientId) { return j("/clients/" + clientId + "/nudge"); }
@@ -487,6 +496,18 @@
             }
           }
           persist();
+          return clone(d);
+        });
+      },
+
+      // Resolve a duplicate flag (keep this copy). Mirrors the backend: clear
+      // duplicate_of, persist. Unknown id rejects; an already-unflagged doc is a
+      // no-op. Discarding the copy uses deleteDocument instead.
+      resolveDuplicate: function (id) {
+        return ready().then(function () {
+          var d = state.documents.filter(function (x) { return x.id === id; })[0];
+          if (!d) return Promise.reject(new Error("no doc " + id));
+          if (d.duplicate_of) { d.duplicate_of = null; persist(); }
           return clone(d);
         });
       },
