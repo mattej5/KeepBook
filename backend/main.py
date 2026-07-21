@@ -10,11 +10,14 @@ Run:  uvicorn main:app --port 8100      (from backend/, venv active)
 import base64
 import copy
 import csv
+import hashlib
 import io
 import json
+import logging
 import math
 import os
 import re
+import stat as stat_mod
 import subprocess
 import threading
 import time
@@ -46,6 +49,28 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
+# Watched-inbox eligibility is intentionally NARROWER than IMAGE_EXTS: only the
+# four common scan/photo formats are auto-ingested from a dropped folder. gif/bmp
+# are still accepted on an explicit /intake upload but ignored by the watcher.
+INBOX_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
+INBOX_POLL_SECONDS = 2.0
+
+# The watcher's log lines (ineligible-file skips, ingests, rejects, scan faults)
+# must actually surface. uvicorn configures only its own loggers and leaves the root
+# at WARNING, so a bare INFO here would be swallowed. Give this one logger its own
+# stderr handler at INFO (idempotent across the test-suite's module reloads) so the
+# "log line only" ignore path and the ambient-ingest lines are visible in the same
+# stream (stderr -> uvicorn.log) as everything else, without touching global config.
+log = logging.getLogger("keepbook.inbox")
+if not log.handlers:
+    _inbox_log_handler = logging.StreamHandler()
+    _inbox_log_handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    log.addHandler(_inbox_log_handler)
+    log.setLevel(logging.INFO)
+    log.propagate = False
+
 # ---------------------------------------------------------------------------
 # In-memory state, guarded by a single lock. Serialized to STATE_PATH.
 # documents/clients are dicts keyed by id (insertion order preserved).
@@ -73,9 +98,31 @@ STATE = {
     "clients": {},     # id -> Client
     "seq_doc": 0,
     "seq_client": 0,
+    # Watched-inbox re-ingest guard (ROADMAP Phase 2, Tier A #3): content sha256 ->
+    # {name, outcome, doc_id?, at, error?}. Persisted so a restart never re-ingests
+    # a file already handled, and a rejected (zero-byte/undecodable) file is not
+    # retried forever. Keyed on CONTENT, so the same bytes under a new filename are
+    # skipped while a new file reusing an old NAME (different content) still ingests.
+    "inbox_seen": {},
 }
 QUEUE = []             # pending doc ids awaiting processing
 PROCESSING = None      # id currently being processed, or None
+
+# Watched-inbox config + runtime state. INBOX_DIR is resolved once at startup from
+# the KEEPBOOK_INBOX env var (None = feature off, zero behavior change). The two
+# dicts below are RUNTIME-ONLY (never persisted) and touched only by the single
+# watcher thread, so they need no lock:
+#   _INBOX_STABLE — name -> (st_size, st_mtime_ns) last seen; a file is ingested
+#                   only once this is UNCHANGED across two consecutive polls
+#                   (partial-write / mid-AirDrop safety).
+#   _INBOX_DONE   — name -> (st_size, st_mtime_ns) at which we last handled the
+#                   file; a read-skip cache so a stable, already-ingested file is
+#                   not re-read every poll. Uses mtime_ns so a same-name rewrite
+#                   (new content) misses the cache and is re-evaluated.
+INBOX_DIR = None
+_INBOX_STOP = threading.Event()
+_INBOX_STABLE = {}
+_INBOX_DONE = {}
 
 # Session-scoped exact-match index for duplicate detection: sha256 -> doc_id.
 # In-memory only (never persisted — would change the pinned Document shape) and
@@ -131,6 +178,15 @@ def _load_state() -> None:
         STATE["clients"] = data.get("clients", {})
         STATE["seq_doc"] = data.get("seq_doc", 0)
         STATE["seq_client"] = data.get("seq_client", 0)
+        # Additive key; old state files without it load fine (default empty).
+        STATE["inbox_seen"] = data.get("inbox_seen", {})
+    else:
+        STATE["inbox_seen"] = {}
+    # Fresh process / reload: forget the runtime stability + read-skip caches so the
+    # watcher re-observes the folder from scratch (inbox_seen, loaded above, still
+    # prevents re-ingest of anything already handled).
+    _INBOX_STABLE.clear()
+    _INBOX_DONE.clear()
     # Any document still "pending" was never finished -> re-enqueue.
     QUEUE = [
         doc_id
@@ -399,13 +455,39 @@ async def _no_stale_frontend(request: Request, call_next):
 
 @app.on_event("startup")
 def _startup() -> None:
-    global STARTED_AT, GIT_SHA
+    global STARTED_AT, GIT_SHA, INBOX_DIR
     STARTED_AT = _now_iso()
     GIT_SHA = _git_sha()
     with STATE_LOCK:
         _load_state()
     t = threading.Thread(target=_worker_loop, name="keepbook-worker", daemon=True)
     t.start()
+
+    # Watched inbox (ROADMAP Phase 2, Tier A #3). Unset KEEPBOOK_INBOX = feature
+    # fully off, zero behavior change. Set = create the folder if missing (parents
+    # ok) and start a stdlib polling thread that mirrors the worker's lifecycle.
+    raw_inbox = os.environ.get("KEEPBOOK_INBOX")
+    if raw_inbox and raw_inbox.strip():
+        INBOX_DIR = os.path.abspath(os.path.expanduser(raw_inbox.strip()))
+        try:
+            os.makedirs(INBOX_DIR, exist_ok=True)
+        except OSError:
+            log.exception("inbox: could not create %r; watcher disabled", INBOX_DIR)
+            INBOX_DIR = None
+        else:
+            _INBOX_STOP.clear()
+            wt = threading.Thread(
+                target=_inbox_watch_loop, name="keepbook-inbox", daemon=True
+            )
+            wt.start()
+            log.info("inbox: watching %s every %ss", INBOX_DIR, INBOX_POLL_SECONDS)
+
+
+@app.on_event("shutdown")
+def _shutdown() -> None:
+    # Signal the watcher thread to stop (daemon threads die with the process, but a
+    # clean stop keeps repeated in-process TestClient starts/stops tidy).
+    _INBOX_STOP.set()
 
 
 @app.get("/health")
@@ -418,6 +500,8 @@ async def health():
         "preprocess": pipeline._preprocess_enabled(),
         "git_sha": GIT_SHA,
         "started_at": STARTED_AT,
+        # Additive: the watched-inbox path, or null when the feature is off.
+        "inbox": INBOX_DIR,
     }
 
 
@@ -462,13 +546,21 @@ def _detect_duplicate_locked(sha: str, phash: str, data: bytes) -> str:
     return None
 
 
-async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict:
-    """Create a pending Document from raw image bytes. Caller holds lock.
+def _create_doc_locked(
+    data: bytes, orig_name: str, sha: str, phash: str, source: str = "upload"
+) -> dict:
+    """Create a pending Document from raw image bytes. Caller holds STATE_LOCK.
 
-    sha/phash are precomputed by the intake validator (dedup.compute_hashes),
-    which already rejected zero-byte/undecodable uploads before any doc is made.
-    The new doc carries its dHash (phash) and duplicate_of (nearest existing
-    match, or null); it still runs the normal pipeline either way.
+    The single shared intake code path: BOTH the HTTP /intake endpoint and the
+    watched-inbox thread land here, so validation (done by the caller via
+    dedup.compute_hashes), dup-flagging, queueing, and the uploads/ COPY are never
+    duplicated. sha/phash are precomputed by the intake validator, which already
+    rejected zero-byte/undecodable uploads before any doc is made.
+
+    The bytes are WRITTEN (copied) into uploads/<doc_id>.<ext>; the caller's source
+    file — an upload buffer or a file sitting in the watched folder — is never moved
+    or deleted. `source` is stamped onto the doc only for the watcher ("folder"); an
+    /intake upload leaves the key absent (absent == "upload", see docs/API.md).
     """
     ext = os.path.splitext(orig_name or "")[1].lower()
     if ext not in IMAGE_EXTS:
@@ -490,10 +582,21 @@ async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict
         "phash": phash,
         "duplicate_of": duplicate_of,
     }
+    if source == "folder":
+        doc["source"] = "folder"
     STATE["documents"][doc_id] = doc
     QUEUE.append(doc_id)
     SHA_INDEX[sha] = doc_id
     return doc
+
+
+async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict:
+    """Async thin wrapper over _create_doc_locked for the HTTP /intake path.
+
+    Kept so the endpoint's call sites are unchanged; the doc carries no `source`
+    key (an /intake upload is the implicit default).
+    """
+    return _create_doc_locked(data, orig_name, sha, phash, source="upload")
 
 
 def _hash_or_400(data: bytes, label: str):
@@ -506,6 +609,127 @@ def _hash_or_400(data: bytes, label: str):
         return dedup.compute_hashes(data)
     except dedup.UnreadableImage as exc:
         raise HTTPException(400, f"{label}: {exc}")
+
+
+# ---------------------- Watched inbox folder (ROADMAP Phase 2, Tier A #3) --------
+def _inbox_eligible_ext(name: str) -> bool:
+    return os.path.splitext(name)[1].lower() in INBOX_EXTS
+
+
+def _inbox_scan_once(inbox: str = None) -> list:
+    """One polling pass over the watched inbox folder. Returns new doc ids.
+
+    Stdlib-only. Ingests top-level, non-hidden png/jpg/jpeg/webp files that have
+    been (size, mtime)-stable across two consecutive scans, routing each through
+    the SAME code path as POST /intake (dedup.compute_hashes validation + dup-flag
+    + queue) and COPYING it into uploads/ — the original in the inbox is never
+    moved, deleted, or renamed. Re-ingest is prevented by content sha256 persisted
+    in state.json (inbox_seen), so a restart, or the same bytes under a new name,
+    never ingests twice; a new file that merely reuses an old NAME (new content)
+    still ingests. Zero-byte / undecodable files are remembered as rejected so they
+    are not retried forever. Raises only on a listdir failure of the inbox itself
+    (surfaced to the loop's guard); per-file IO errors are swallowed.
+    """
+    inbox = inbox or INBOX_DIR
+    if not inbox or not os.path.isdir(inbox):
+        return []
+    entries = sorted(os.listdir(inbox))  # top-level only; no os.walk / recursion
+
+    # Phase 1 (no lock): pick files that are stable-and-unseen, read + hash them.
+    candidates = []  # (name, data, sha_raw, cur_stat)
+    for name in entries:
+        if name.startswith("."):  # hidden / dotfiles (.DS_Store, partial temp names)
+            continue
+        path = os.path.join(inbox, name)
+        try:
+            st = os.stat(path)
+        except OSError:
+            _INBOX_STABLE.pop(name, None)
+            continue
+        if not stat_mod.S_ISREG(st.st_mode):  # dirs, dir-symlinks, fifos -> skip
+            continue
+        cur = (st.st_size, st.st_mtime_ns)
+        if not _inbox_eligible_ext(name):
+            # Ignored silently, one log line per newly-seen (name, stat).
+            if _INBOX_DONE.get(name) != cur:
+                log.info("inbox: ignoring ineligible file %r", name)
+                _INBOX_DONE[name] = cur
+            continue
+        if _INBOX_DONE.get(name) == cur:
+            continue  # already handled this exact file; skip the re-read
+        prev = _INBOX_STABLE.get(name)
+        _INBOX_STABLE[name] = cur
+        if prev != cur:
+            continue  # not (size,mtime)-stable across two consecutive polls yet
+        try:
+            with open(path, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            continue
+        candidates.append((name, data, hashlib.sha256(data).hexdigest(), cur))
+
+    if not candidates:
+        return []
+
+    # Phase 2 (under lock): dedup by content sha, validate, create docs, persist.
+    new_ids = []
+    flagged = []   # (doc_id, duplicate_of)
+    rejected = []  # (name, error)
+    with STATE_LOCK:
+        seen = STATE["inbox_seen"]
+        for name, data, sha_raw, cur in candidates:
+            if sha_raw in seen:
+                _INBOX_DONE[name] = cur  # e.g. same content re-dropped under a new name
+                continue
+            try:
+                sha, phash = dedup.compute_hashes(data)
+            except dedup.UnreadableImage as exc:
+                seen[sha_raw] = {
+                    "name": name, "outcome": "rejected",
+                    "at": _now_iso(), "error": str(exc),
+                }
+                _INBOX_DONE[name] = cur
+                rejected.append((name, str(exc)))
+                continue
+            doc = _create_doc_locked(data, name, sha, phash, source="folder")
+            seen[sha_raw] = {
+                "name": name, "outcome": "ingested",
+                "doc_id": doc["id"], "at": _now_iso(),
+            }
+            _INBOX_DONE[name] = cur
+            new_ids.append(doc["id"])
+            if doc.get("duplicate_of"):
+                flagged.append((doc["id"], doc["duplicate_of"]))
+        if new_ids or rejected:
+            _persist_locked()
+
+    # Events + wake OUTSIDE the lock (mirrors /intake). Additive event types; the
+    # /stats/timeline aggregation ignores unknown types, so it is unaffected.
+    for name, err in rejected:
+        log.warning("inbox: rejected %r (%s)", name, err)
+        _append_event({"type": "inbox_rejected", "name": name, "error": err})
+    for doc_id in new_ids:
+        log.info("inbox: ingested %s", doc_id)
+        _append_event({"type": "inbox_ingested", "doc_id": doc_id})
+    for doc_id, dup_of in flagged:
+        _append_event({"type": "dup_flagged", "doc_id": doc_id, "duplicate_of": dup_of})
+    if new_ids:
+        WAKE.set()
+    return new_ids
+
+
+def _inbox_watch_loop() -> None:
+    """Poll the watched inbox ~every INBOX_POLL_SECONDS until _INBOX_STOP is set.
+
+    Defensive by construction: a scan raising anything (a permissions flip, a
+    disappearing dir, a transient IO fault) is logged and swallowed so the watcher
+    thread — and therefore the server — never dies (mirrors the worker's guard)."""
+    while not _INBOX_STOP.is_set():
+        try:
+            _inbox_scan_once()
+        except Exception:  # noqa: BLE001 - the watcher must never take down the server
+            log.exception("inbox: scan failed; continuing")
+        _INBOX_STOP.wait(INBOX_POLL_SECONDS)
 
 
 @app.post("/intake")

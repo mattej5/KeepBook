@@ -355,7 +355,7 @@
         var landAttr = isNew ? ' style="animation-delay:' + Math.min(landIdx++, 6) * 40 + 'ms"' : '';
         return '<button class="rl-item' + (isNew ? " card-land" : "") + (d.id === state.selectedDoc ? " active" : "") + '" data-id="' + d.id + '"' + landAttr + '>' +
           '<div class="rl-type">' + esc(typ) + pageLabel(d) + '</div>' +
-          '<div class="rl-client">' + esc(client) + '</div>' + badge + dupBadge(d) + '</button>';
+          '<div class="rl-client">' + esc(client) + '</div>' + badge + dupBadge(d) + sourceChip(d) + '</button>';
       }).join("");
       needs.forEach(function (d) { state.knownReviewIds[d.id] = 1; });
       listEl.querySelectorAll("[data-id]").forEach(function (b) {
@@ -383,6 +383,16 @@
     return doc && doc.duplicate_of
       ? '<span class="rl-badge dup" title="Possible duplicate of ' + esc(doc.duplicate_of) +
         '">Possible duplicate</span>'
+      : '';
+  }
+
+  // Provenance chip for a doc the watched-inbox thread ingested on its own
+  // (backend stamps doc.source === "folder"; normal uploads leave it absent). A
+  // tiny, unobtrusive "from inbox folder" tag so the reviewer can see a doc arrived
+  // without anyone uploading it. Absent/other source => no chip.
+  function sourceChip(doc) {
+    return doc && doc.source === "folder"
+      ? '<span class="rl-badge source" title="Auto-ingested from the watched inbox folder">from inbox folder</span>'
       : '';
   }
 
@@ -439,7 +449,7 @@
       var right = "";
 
       var heading = errored ? "Model unavailable" : unrec ? "Unrecognized document" : doc.doc_type;
-      right += '<h2>' + esc(heading) + pageLabel(doc) + '</h2>';
+      right += '<h2>' + esc(heading) + pageLabel(doc) + sourceChip(doc) + '</h2>';
       right += '<div class="doc-sub">' + (confirmed
         ? 'Confirmed · in ' + esc(clientName(doc.client_id) || "—") + '\'s file'
         : errored
@@ -829,7 +839,7 @@
               : '<span class="rl-badge needs">Needs review</span>';
           return '<button class="rl-item" data-id="' + d.id + '"><div class="rl-type">' +
             esc(d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type) + pageLabel(d) + '</div>' +
-            '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + dupBadge(d) + '</button>';
+            '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + dupBadge(d) + sourceChip(d) + '</button>';
         }).join("") : '<div class="rl-empty">Nothing left to review. All caught up.</div>';
         listEl.querySelectorAll("[data-id]").forEach(function (b) {
           b.onclick = function () { state.selectedDoc = b.dataset.id; renderReview(); };
