@@ -2,3 +2,7 @@ pillow==12.3.0
 pymupdf==1.28.0
 numpy==2.5.1
 pytest==9.0.3
+# TEST / fixture-generation only (eval/gen_pdf_fixtures.py builds the PDF intake
+# test fixtures — encryption in particular). Pure-python, not a backend runtime
+# dependency. BSD-3-Clause.
+pypdf==6.14.2

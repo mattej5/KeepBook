@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 import dedup
+import pdf_render
 import pipeline
 from model_runtime import generate_text as model_generate_text
 
@@ -547,20 +548,32 @@ def _detect_duplicate_locked(sha: str, phash: str, data: bytes) -> str:
 
 
 def _create_doc_locked(
-    data: bytes, orig_name: str, sha: str, phash: str, source: str = "upload"
+    data: bytes,
+    orig_name: str,
+    sha: str,
+    phash: str,
+    source: str = "upload",
+    page_number: int = None,
+    source_file: str = None,
 ) -> dict:
     """Create a pending Document from raw image bytes. Caller holds STATE_LOCK.
 
-    The single shared intake code path: BOTH the HTTP /intake endpoint and the
-    watched-inbox thread land here, so validation (done by the caller via
-    dedup.compute_hashes), dup-flagging, queueing, and the uploads/ COPY are never
-    duplicated. sha/phash are precomputed by the intake validator, which already
-    rejected zero-byte/undecodable uploads before any doc is made.
+    The single shared intake code path: the HTTP /intake endpoint (images AND
+    rendered PDF pages) and the watched-inbox thread all land here, so validation
+    (done by the caller via dedup.compute_hashes), dup-flagging, queueing, and the
+    uploads/ COPY are never duplicated. sha/phash are precomputed by the intake
+    validator, which already rejected zero-byte/undecodable uploads before any doc
+    is made.
 
     The bytes are WRITTEN (copied) into uploads/<doc_id>.<ext>; the caller's source
     file — an upload buffer or a file sitting in the watched folder — is never moved
     or deleted. `source` is stamped onto the doc only for the watcher ("folder"); an
     /intake upload leaves the key absent (absent == "upload", see docs/API.md).
+
+    For a page rendered from a PDF, page_number (1-based) and source_file (the
+    original PDF filename) are set — additive fields, absent on image uploads —
+    so a multi-page PDF's pages group visibly and continuation pages can be filed
+    by hand.
     """
     ext = os.path.splitext(orig_name or "")[1].lower()
     if ext not in IMAGE_EXTS:
@@ -584,19 +597,38 @@ def _create_doc_locked(
     }
     if source == "folder":
         doc["source"] = "folder"
+    if page_number is not None:
+        doc["page_number"] = page_number
+    if source_file is not None:
+        doc["source_file"] = source_file
     STATE["documents"][doc_id] = doc
     QUEUE.append(doc_id)
     SHA_INDEX[sha] = doc_id
     return doc
 
 
-async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict:
+async def _save_bytes(
+    data: bytes,
+    orig_name: str,
+    sha: str,
+    phash: str,
+    page_number: int = None,
+    source_file: str = None,
+) -> dict:
     """Async thin wrapper over _create_doc_locked for the HTTP /intake path.
 
     Kept so the endpoint's call sites are unchanged; the doc carries no `source`
-    key (an /intake upload is the implicit default).
-    """
-    return _create_doc_locked(data, orig_name, sha, phash, source="upload")
+    key (an /intake upload is the implicit default). page_number/source_file are
+    set for rendered PDF pages (see _prepare_upload)."""
+    return _create_doc_locked(
+        data,
+        orig_name,
+        sha,
+        phash,
+        source="upload",
+        page_number=page_number,
+        source_file=source_file,
+    )
 
 
 def _hash_or_400(data: bytes, label: str):
@@ -732,6 +764,51 @@ def _inbox_watch_loop() -> None:
         _INBOX_STOP.wait(INBOX_POLL_SECONDS)
 
 
+def _prepare_upload(data: bytes, filename: str, password) -> list:
+    """Expand one uploaded file into per-page intake items, validating everything
+    BEFORE any document is created so a single bad file fails the whole request.
+
+    Returns a list of (data, name, sha, phash, page_number, source_file):
+      * an image yields exactly one item (page_number/source_file = None);
+      * a PDF is rendered here to one PNG per page (each its own item, 1-based
+        page_number, source_file = the PDF filename).
+
+    Raises HTTPException 400 on any unreadable/oversized/encrypted-without-password
+    file. Encrypted-PDF details use a machine-checkable prefix and carry NO
+    password material — only the filename:
+      * password_required:<filename>   — encrypted, no usable password given
+      * password_incorrect:<filename>  — encrypted, wrong password given
+    """
+    if pdf_render.is_pdf(data, filename):
+        try:
+            pages = pdf_render.render_pdf_pages(data, filename, password)
+        except pdf_render.PasswordRequired as exc:
+            raise HTTPException(400, f"password_required:{exc.filename}")
+        except pdf_render.PasswordIncorrect as exc:
+            raise HTTPException(400, f"password_incorrect:{exc.filename}")
+        except pdf_render.PdfTooManyPages as exc:
+            raise HTTPException(400, str(exc))
+        except pdf_render.PdfUnreadable as exc:
+            raise HTTPException(400, str(exc))
+        items = []
+        for page_number, page_png in enumerate(pages, start=1):
+            sha, phash = _hash_or_400(page_png, filename)
+            items.append((page_png, filename, sha, phash, page_number, filename))
+        return items
+
+    # Non-PDF: must be a supported image type. Reject anything else loudly instead
+    # of silently coercing it to .png and producing a fake "unrecognized".
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext not in IMAGE_EXTS:
+        raise HTTPException(
+            400,
+            f"unsupported file type {ext or '(none)'!r} for {filename!r}; "
+            "images (png, jpg, jpeg, webp, gif, bmp) or PDF (.pdf) only",
+        )
+    sha, phash = _hash_or_400(data, filename)
+    return [(data, filename, sha, phash, None, None)]
+
+
 @app.post("/intake")
 async def intake(request: Request):
     ct = request.headers.get("content-type", "")
@@ -743,30 +820,43 @@ async def intake(request: Request):
         folder = body.get("folder")
         if not folder or not os.path.isdir(folder):
             raise HTTPException(400, f"folder not found: {folder!r}")
+        # Optional password applies to any encrypted PDFs in the folder. Never
+        # persisted/logged — passed only to the renderer (see _prepare_upload).
+        password = body.get("password")
+        accepted_exts = IMAGE_EXTS | {".pdf"}
         names = sorted(
             n
             for n in os.listdir(folder)
-            if os.path.splitext(n)[1].lower() in IMAGE_EXTS
+            if os.path.splitext(n)[1].lower() in accepted_exts
         )
         if not names:
-            raise HTTPException(400, f"no images in folder: {folder!r}")
-        # Read + validate + hash every file BEFORE any doc is created, so one bad
-        # image fails the whole request cleanly instead of leaving half a batch.
+            raise HTTPException(400, f"no images or PDFs in folder: {folder!r}")
+        # Read + validate + render every file BEFORE any doc is created, so one bad
+        # file (or a PDF needing a password) fails the whole request cleanly
+        # instead of leaving half a batch. PDFs expand to one item per page here.
         prepared = []
         for n in names:
             with open(os.path.join(folder, n), "rb") as fh:
                 data = fh.read()
-            sha, phash = _hash_or_400(data, n)
-            prepared.append((data, n, sha, phash))
+            prepared.extend(_prepare_upload(data, n, password))
         with STATE_LOCK:
-            for data, n, sha, phash in prepared:
-                doc = await _save_bytes(data, n, sha, phash)
+            for data, name, sha, phash, page_number, source_file in prepared:
+                doc = await _save_bytes(
+                    data, name, sha, phash, page_number, source_file
+                )
                 queued.append(doc["id"])
                 if doc.get("duplicate_of"):
                     flagged.append((doc["id"], doc["duplicate_of"]))
             _persist_locked()
     else:
         form = await request.form()
+        # Optional password form field applies to any PDFs in this request. Kept
+        # only in memory for the render call — never persisted, logged, or echoed
+        # in an error (see _prepare_upload / pdf_render). Guard against a client
+        # sending a file under the "password" key.
+        password = form.get("password")
+        if isinstance(password, StarletteUploadFile):
+            password = None
         # multi_items() keeps EVERY (key, value) pair — the built frontend sends
         # each file under a repeated "file" key (frontend/js/api.js), and
         # form.values() would collapse them to one. Field name pinned to "file"
@@ -778,26 +868,20 @@ async def intake(request: Request):
         ]
         if not uploads:
             raise HTTPException(400, 'no files under multipart field "file"')
-        # Images only — KeepBook renders no PDFs (IMPROVEMENTS #6). Reject a
-        # non-image upload loudly instead of silently coercing it to .png and
-        # producing a fake "unrecognized".
-        for up in uploads:
-            ext = os.path.splitext(up.filename or "")[1].lower()
-            if ext not in IMAGE_EXTS:
-                raise HTTPException(
-                    400,
-                    f"unsupported file type {ext or '(none)'!r} for {up.filename!r}; "
-                    "images only (png, jpg, jpeg, webp, gif, bmp)",
-                )
-        # Read + validate + hash every upload before creating any doc (see above).
+        # Read + validate + render every upload before creating any doc (see
+        # above). Images stay one doc; PDFs expand to one item per rendered page.
+        # Unsupported types are rejected loudly inside _prepare_upload.
         prepared = []
         for up in uploads:
             data = await up.read()
-            sha, phash = _hash_or_400(data, up.filename or "(unnamed)")
-            prepared.append((data, up.filename, sha, phash))
+            prepared.extend(
+                _prepare_upload(data, up.filename or "(unnamed)", password)
+            )
         with STATE_LOCK:
-            for data, name, sha, phash in prepared:
-                doc = await _save_bytes(data, name, sha, phash)
+            for data, name, sha, phash, page_number, source_file in prepared:
+                doc = await _save_bytes(
+                    data, name, sha, phash, page_number, source_file
+                )
                 queued.append(doc["id"])
                 if doc.get("duplicate_of"):
                     flagged.append((doc["id"], doc["duplicate_of"]))

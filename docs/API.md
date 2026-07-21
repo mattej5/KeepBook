@@ -48,6 +48,8 @@ The eval runner (docs/EVAL.md) imports this same adapter and honors the same env
   "phash": "a1b2…(64 hex chars)",         // OPTIONAL (additive) — 256-bit dHash (17x16 grid) as 64 hex chars, computed at intake. Absent on pre-feature docs; legacy 16-hex (64-bit era) values are lazily recomputed from the stored image at the next intake, or skipped if the image is gone.
   "duplicate_of": null,                    // OPTIONAL (additive) — doc_id this was flagged a near/exact duplicate of, or null. See "Duplicate detection".
   "source": "folder",                      // OPTIONAL (additive) — "folder" iff ingested by the watched-inbox thread; ABSENT for normal uploads (absent == "upload"). See "Watched intake folder".
+  "page_number": 2,                        // OPTIONAL (additive) — 1-based page for a page rendered from a PDF (set at intake), or filed by hand at confirm. Absent otherwise. See "PDF intake".
+  "source_file": "statement.pdf",          // OPTIONAL (additive) — original PDF filename a rendered page came from, so multi-page PDFs group. Absent on image uploads. See "PDF intake".
   "fields": {                          // extracted; keys vary by doc_type
     // per-field OPTIONAL "low_confidence": true — backend sets it from honest deterministic signals
     // (model needed a retry, value empty, or format check failed e.g. SSN/EIN/TIN pattern, non-numeric money).
@@ -75,7 +77,7 @@ Rule: a checklist item is satisfied only by a **confirmed** document. Unrecogniz
 
 | Method | Path | Body | Returns | Notes |
 |---|---|---|---|---|
-| POST | `/intake` | multipart file(s) | `{"queued": ["doc_001", ...]}` | Multipart field name is `file`, repeated once per file (pinned — the built frontend sends exactly this; FastAPI: `file: list[UploadFile] = File(...)`). Also support `{"folder": "/path"}` JSON body for folder-drop. |
+| POST | `/intake` | multipart file(s) | `{"queued": ["doc_001", ...]}` | Multipart field name is `file`, repeated once per file (pinned — the built frontend sends exactly this; FastAPI: `file: list[UploadFile] = File(...)`). Accepts images **and `.pdf`** files; an optional `password` form field applies to any encrypted PDFs in the request. Also support `{"folder": "/path"}` JSON body for folder-drop (may include `"password"`). See "PDF intake". |
 | GET | `/queue` | — | `{"pending": n, "processing": "doc_002" \| null, "done": n}` | Frontend polls this during processing. |
 | GET | `/documents` | — | `[Document, ...]` | Everything, all statuses. |
 | GET | `/documents/{id}` | — | `Document` | |
@@ -268,6 +270,58 @@ types and is unchanged):
 {"ts": "2026-07-20T09:14:05Z", "type": "inbox_ingested", "doc_id": "doc_009"}
 {"ts": "2026-07-20T09:14:07Z", "type": "inbox_rejected", "name": "blank.png", "error": "empty upload (zero bytes)"}
 ```
+
+Note: the watcher accepts images only. A PDF dropped in the inbox is ignored (log
+line) — PDF ingestion is an `/intake` upload feature today ("PDF intake" below);
+extending the watcher to PDFs is a small follow-up once a password story for
+ambient encrypted PDFs exists.
+
+## PDF intake (Phase 2, Tier C #9)
+
+Real firms receive PDFs — bank statements often arrive as **password-protected**
+PDFs over email. KeepBook's pipeline reads images, so `POST /intake` renders each
+PDF page to a PNG **server-side** and runs every page through the normal
+classify/extract path as its own document. Rendering uses `pypdfium2`
+(BSD-3-Clause / Apache-2.0), never PyMuPDF (AGPL). **Decryption stays on-device;
+the password is never persisted, logged, or echoed in an error.**
+
+**Accepted types.** Images (png, jpg, jpeg, webp, gif, bmp) and PDF. A file is
+treated as a PDF when its bytes begin with the `%PDF` magic number **or** its
+name ends in `.pdf`. **Magic wins:** a `%PDF` file is a PDF regardless of
+extension; a `.pdf` file whose content is not `%PDF` still enters the PDF path
+and is rejected as corrupt (below) rather than guessed at as an image. Anything
+that is neither a supported image nor a PDF → `400`.
+
+**Password.** Optional multipart form field `password` (or `"password"` in the
+folder-drop JSON body) applies to every PDF in that request. Sent transiently for
+the render call only; it is held in memory, never written to `state.json` /
+`events.jsonl` / `raws/` or any server log.
+
+**Rendering.** Each page → PNG at ~200 DPI (scale derived from the page size, so a
+huge page can't blow up memory). Each rendered page becomes its **own** document
+with `page_number` (1-based) and `source_file` (the original PDF filename) set, so
+a multi-page PDF's pages group visibly. Continuation pages will often classify
+`UNRECOGNIZED` — expected; the manual assign/confirm path (with `page_number`)
+files them by hand.
+
+**Page cap.** More than **20 pages** → the whole file is rejected `400` (consistent
+with one-bad-file-fails-the-batch). Each rendered PNG is dup-hashed like any image,
+so a page matching an existing doc is `duplicate_of`-flagged normally.
+
+**Errors** (all `400`, `{"detail": "..."}`; nothing is created — one bad file fails
+the whole request):
+
+| Condition | `detail` |
+|---|---|
+| Encrypted, no (usable) password given | `password_required:<filename>` |
+| Encrypted, wrong password given | `password_incorrect:<filename>` |
+| More than 20 pages | `<filename>: PDF has N pages; the limit is 20 pages per file` |
+| Zero-byte / corrupt / unreadable PDF | `<filename>: unreadable or corrupt PDF` |
+
+The `password_required:` / `password_incorrect:` prefixes are machine-checkable and
+carry only the filename — no password material. The frontend watches for them to
+prompt for a password and re-submit the same files (input `type="password"`, kept
+in memory only, cleared after the retry).
 
 ## Event log (stretch tier — Stats for Nerds)
 

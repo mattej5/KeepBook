@@ -59,10 +59,24 @@
       getQueue: function () { return j("/queue"); },
       imageUrl: function (doc) { return base + "/documents/" + doc.id + "/image"; },
       exportCsvUrl: function (clientId) { return base + "/clients/" + clientId + "/export.csv"; },
-      intake: function (files) {
+      // intake(files, password): password (optional) applies to any encrypted
+      // PDFs in this request. It is sent only as a transient form field and is
+      // never stored client-side. Unlike j(), this surfaces the server's 400
+      // detail (e.g. "password_required:<name>") on the rejected Error so the UI
+      // can drive the password-retry flow.
+      intake: function (files, password) {
         var fd = new FormData();
         for (var i = 0; i < files.length; i++) fd.append("file", files[i]);
-        return j("/intake", { method: "POST", body: fd });
+        if (password != null && password !== "") fd.append("password", password);
+        return fetch(base + "/intake", { method: "POST", body: fd }).then(function (r) {
+          if (r.ok) return r.json();
+          return r.json().catch(function () { return {}; }).then(function (body) {
+            var err = new Error("/intake -> " + r.status);
+            err.status = r.status;
+            err.detail = body && body.detail;
+            throw err;
+          });
+        });
       },
       confirm: function (id, payload) {
         return j("/documents/" + id + "/confirm", {
@@ -373,7 +387,9 @@
         });
       },
 
-      intake: function (files) {
+      // Mock mode serves no real PDFs, so `password` is accepted for signature
+      // parity with the real adapter and otherwise ignored.
+      intake: function (files, password) {
         return ready().then(function () {
           var queued = [];
           var now = Date.now();
