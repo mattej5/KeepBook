@@ -177,6 +177,58 @@ def extract(image_b64: str, prompt: str, model: str = None) -> str:
     return _extract_ollama(image_b64, prompt, model=model)
 
 
+# ---------------------------------------------------------------------------
+# Text-only call (docs/API.md "Model call (backend internal)" — nudge draft).
+# Same runtime selection + env vars as extract(), no image payload. Kept in
+# this module only, per the one-adapter discipline (grep-verified in CI/tests:
+# no other backend file may hardcode a model URL).
+# ---------------------------------------------------------------------------
+def _generate_text_ollama(prompt: str, model: str = None) -> str:
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    payload = {
+        "model": model or _model_name(),
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0.2},
+    }
+    out = _post_json(
+        f"{host}/api/generate", payload, {"Content-Type": "application/json"}, timeout=30
+    )
+    return out.get("response", "")
+
+
+def _generate_text_courier(prompt: str, model: str = None) -> str:
+    base = os.environ.get("COURIER_BASE_URL", "").rstrip("/")
+    if not base:
+        raise RuntimeError(
+            "MODEL_RUNTIME=courier but COURIER_BASE_URL is unset (see backend/.env)"
+        )
+    key = os.environ.get("COURIER_API_KEY", "")
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    payload = {
+        "model": model or _model_name(),
+        "temperature": 0.2,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    out = _post_json(f"{base}/chat/completions", payload, headers, timeout=30)
+    return out["choices"][0]["message"]["content"]
+
+
+def generate_text(prompt: str, model: str = None) -> str:
+    """Text-only call through the configured runtime (no image). Used by the
+    nudge-draft endpoint. Same MODEL_RUNTIME/MODEL_NAME env selection as
+    extract(); callers must treat any exception (timeout, connection error,
+    non-JSON body) as "no draft" and fall back — this function never retries
+    and never swallows errors itself.
+    """
+    runtime = _runtime()
+    if runtime == "courier":
+        return _generate_text_courier(prompt, model=model)
+    return _generate_text_ollama(prompt, model=model)
+
+
 if __name__ == "__main__":
     # Smoke: MODEL_RUNTIME=ollama python model_runtime.py <image_path>
     import base64

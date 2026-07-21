@@ -78,7 +78,8 @@
         return j("/documents/" + id + "/unconfirm", { method: "POST" });
       },
       getTimeline: function (hours) { return j("/stats/timeline?hours=" + (hours || 24)); },
-      getRuns: function (limit) { return j("/runs?limit=" + (limit || 20)); }
+      getRuns: function (limit) { return j("/runs?limit=" + (limit || 20)); },
+      getNudge: function (clientId) { return j("/clients/" + clientId + "/nudge"); }
     };
   })();
 
@@ -533,6 +534,31 @@
           last.docs = Math.max(0, last.docs + dDocs);
           last.corrections = Math.max(0, last.corrections + dCorr);
           return t;
+        });
+      },
+
+      // Mock mode has no backend model to draft with, so this always returns
+      // the deterministic template (generated_by: "template") — same shape +
+      // content guarantees as the real endpoint's fallback path, so the modal
+      // works identically offline. See docs/API.md "Nudge draft".
+      getNudge: function (clientId) {
+        return ready().then(function () {
+          var c = state.clients.filter(function (x) { return x.id === clientId; })[0];
+          if (!c) return Promise.reject(new Error("no client " + clientId));
+          var received = {};
+          (c.received_docs || []).forEach(function (t) { received[t] = true; });
+          var missing = (c.expected_docs || []).filter(function (t) { return !received[t]; });
+          if (!missing.length) return { client_id: clientId, missing: [], draft: null };
+          var lines = ["Hi " + c.name + ",", "",
+            "As we prepare your tax return, we're still missing the following document" +
+              (missing.length === 1 ? "" : "s") + ":", ""];
+          missing.forEach(function (t) { lines.push("- " + t); });
+          lines.push("", "Could you send " + (missing.length === 1 ? "this" : "these") +
+            " over when you have a moment?", "", "Thank you.");
+          return {
+            client_id: clientId, missing: missing,
+            draft: lines.join("\n"), generated_by: "template"
+          };
         });
       }
     };

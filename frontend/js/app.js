@@ -859,6 +859,10 @@
       grid.querySelectorAll("[data-edit-client]").forEach(function (b) {
         b.onclick = function () { openEditClientForm(b.dataset.editClient); };
       });
+      // "Draft reminder" — only rendered on cards with a MISSING item.
+      grid.querySelectorAll("[data-nudge-client]").forEach(function (b) {
+        b.onclick = function () { openNudgeModal(b.dataset.nudgeClient, b.dataset.nudgeName); };
+      });
       // The create + edit forms render as full-row cards in the grid; the create
       // form's trigger is the static "Add Client" FAB (bound once in boot()).
       appendEditClientCard();
@@ -1267,6 +1271,110 @@
     });
   }
 
+  /* ---------- Draft reminder (nudge) modal ---------- */
+  // Visible-autonomy affordance (ROADMAP Phase 2, Tier A #4): the model DRAFTS
+  // a per-client "still waiting on" note from GET /clients/{id}/nudge; the
+  // human reviews it in an editable textarea and copies it — there is no send
+  // capability anywhere, by design. Only shown on cards with a MISSING item
+  // (clientCardHtml omits the affordance entirely once a client is complete).
+  var nudgeState = { open: false, clientId: null, clientName: "", loading: false, error: "", result: null };
+
+  function ensureNudgeOverlay() {
+    var el = $("nudge-overlay");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "nudge-overlay";
+    el.className = "nudge-overlay";
+    el.hidden = true;
+    document.body.appendChild(el);
+    el.addEventListener("click", function (e) { if (e.target === el) closeNudgeModal(); });
+    return el;
+  }
+
+  function nudgeEscHandler(e) { if (e.key === "Escape") closeNudgeModal(); }
+
+  function openNudgeModal(clientId, clientName) {
+    nudgeState = { open: true, clientId: clientId, clientName: clientName || "", loading: true, error: "", result: null };
+    paintNudgeModal();
+    document.addEventListener("keydown", nudgeEscHandler);
+    api.getNudge(clientId).then(function (r) {
+      if (!nudgeState.open || nudgeState.clientId !== clientId) return;  // closed/superseded meanwhile
+      nudgeState.loading = false;
+      nudgeState.result = r;
+      paintNudgeModal();
+    }).catch(function (e) {
+      if (!nudgeState.open || nudgeState.clientId !== clientId) return;
+      nudgeState.loading = false;
+      nudgeState.error = (e && e.message) || "error";
+      paintNudgeModal();
+    });
+  }
+
+  function closeNudgeModal() {
+    nudgeState = { open: false, clientId: null, clientName: "", loading: false, error: "", result: null };
+    document.removeEventListener("keydown", nudgeEscHandler);
+    var el = $("nudge-overlay");
+    if (el) { el.hidden = true; el.innerHTML = ""; }
+  }
+
+  function paintNudgeModal() {
+    var overlay = ensureNudgeOverlay();
+    if (!nudgeState.open) { overlay.hidden = true; overlay.innerHTML = ""; return; }
+    overlay.hidden = false;
+
+    var body;
+    if (nudgeState.loading) {
+      body = '<div class="rl-empty">Drafting…</div>';
+    } else if (nudgeState.error) {
+      body = '<div class="rl-empty">Couldn’t draft a reminder (' + esc(nudgeState.error) + ').</div>';
+    } else {
+      var r = nudgeState.result || {};
+      if (!r.draft) {
+        body = '<div class="rl-empty">' + esc(nudgeState.clientName) + ' has everything — nothing to nudge.</div>';
+      } else {
+        var note = r.generated_by === "model"
+          ? '<div class="nudge-note">drafted by the model — review before sending</div>'
+          : '<div class="nudge-note nudge-note-template">drafted from a template — review before sending</div>';
+        body = '<textarea class="nudge-textarea" id="nudge-textarea" spellcheck="false">' + esc(r.draft) + '</textarea>' +
+          note +
+          '<div class="nudge-foot"><button class="btn-ghost btn-sm" id="nudge-cancel" type="button">Close</button>' +
+          '<button class="btn btn-sm" id="nudge-copy" type="button">Copy</button></div>';
+      }
+    }
+
+    overlay.innerHTML = '<div class="nudge-modal" role="dialog" aria-modal="true" aria-label="Draft reminder">' +
+      '<div class="nudge-head"><div class="nudge-title">Draft reminder</div>' +
+      '<button class="nudge-x" id="nudge-x" type="button" aria-label="Close">×</button></div>' +
+      '<div class="nudge-sub">' + esc(nudgeState.clientName) + '</div>' +
+      '<div class="nudge-body">' + body + '</div></div>';
+
+    var x = $("nudge-x"); if (x) x.onclick = closeNudgeModal;
+    var cancel = $("nudge-cancel"); if (cancel) cancel.onclick = closeNudgeModal;
+    var copyBtn = $("nudge-copy");
+    if (copyBtn) copyBtn.onclick = function () { copyNudgeDraft(copyBtn); };
+  }
+
+  function execCommandCopy(ta, done) {
+    try {
+      ta.focus(); ta.select();
+      done(document.execCommand("copy"));
+    } catch (e) { done(false); }
+  }
+
+  function copyNudgeDraft(btn) {
+    var ta = $("nudge-textarea");
+    if (!ta) return;
+    function done(ok) {
+      btn.textContent = ok ? "Copied" : "Copy failed";
+      setTimeout(function () { if ($("nudge-copy")) $("nudge-copy").textContent = "Copy"; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value).then(function () { done(true); }, function () { execCommandCopy(ta, done); });
+    } else {
+      execCommandCopy(ta, done);
+    }
+  }
+
   // Build a real mailto: draft chasing a client's still-missing documents.
   // Frontend-only (works offline, same in mock mode). Every interpolated value
   // is URL-encoded; body newlines are CRLF (%0D%0A after encoding). No claims
@@ -1356,6 +1464,15 @@
       : '';
     var frac = '<span class="progress-frac tnum' + (complete ? " done" : "") + '" title="Documents received and confirmed, out of the ' + total + ' this client is expected to send.">' + haveCount + '/' + total + '</span>';
 
+    // "Draft reminder" — visible-autonomy affordance, only while something is
+    // actually missing. margin-right:auto pushes it to the left of the foot
+    // row while the CSV link (unchanged) stays flush right via the
+    // container's justify-content:flex-end (docs/API.md "Nudge draft").
+    var draftReminderBtn = complete ? "" : (
+      '<button class="draft-reminder-link" style="margin-right:auto" ' +
+      'data-nudge-client="' + esc(c.id) + '" data-nudge-name="' + esc(c.name) + '">Draft reminder</button>'
+    );
+
     return '<div class="card client-card"><div class="card-pad">' +
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">' +
       '<div class="client-name">' + esc(c.name) + '</div>' +
@@ -1366,7 +1483,7 @@
       '<div class="client-meta">2025 tax intake · <span class="count tnum">' + haveCount + ' of ' + total + ' received</span></div>' +
       rows +
       alsoHtml +
-      '<div class="client-foot"><a class="export-csv-link" href="' + esc(api.exportCsvUrl(c.id)) +
+      '<div class="client-foot">' + draftReminderBtn + '<a class="export-csv-link" href="' + esc(api.exportCsvUrl(c.id)) +
       '" download="' + esc(c.id) + '.csv" title="Confirmed documents as CSV — imports anywhere">Export CSV ↓</a></div>' +
       '</div></div>';
   }

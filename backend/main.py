@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 import pipeline
+from model_runtime import generate_text as model_generate_text
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -859,6 +860,113 @@ async def delete_client(client_id: str):
 
     _append_event({"type": "client_deleted", "client_id": client_id})
     return {"deleted": client_id}
+
+
+# ------------------------ Nudge (missing-doc reminder draft) ---------------
+# Visible-autonomy feature: the model DRAFTS a short reminder note listing the
+# client's still-missing checklist items; the human copies + sends it by hand
+# (no email integration, no send button anywhere — see docs/API.md).
+NUDGE_MAX_CHARS = 900
+
+
+def _nudge_template(client_name: str, missing: list) -> str:
+    """Deterministic fallback draft — same content guarantees as the model
+    path (greets by name, lists every missing doc verbatim, nothing invented).
+    """
+    lines = [
+        f"Hi {client_name},",
+        "",
+        "As we prepare your tax return, we're still missing the following "
+        "document" + ("" if len(missing) == 1 else "s") + ":",
+        "",
+    ]
+    for m in missing:
+        lines.append(f"- {m}")
+    lines.append("")
+    lines.append("Could you send " + ("this" if len(missing) == 1 else "these") + " over when you have a moment?")
+    lines.append("")
+    lines.append("Thank you.")
+    return "\n".join(lines)
+
+
+def _nudge_prompt(client_name: str, missing: list) -> str:
+    doc_list = "\n".join(f"- {m}" for m in missing)
+    return (
+        "You are drafting a short, professional reminder note from a tax "
+        f"preparation firm to a client named {client_name}.\n"
+        "Greet the client by name. Then list EXACTLY these missing documents, "
+        f"verbatim, one per line, nothing added or removed:\n{doc_list}\n"
+        "Ask them to send those documents in. Say nothing else.\n"
+        "HARD RULES: never invent a deadline, dollar amount, or fee that was "
+        "not given to you. Never use a placeholder like [Firm Name], [Date], "
+        "or [Your Name] — if a detail is unknown, leave it out entirely. Keep "
+        "the whole note under 900 characters. Return ONLY the note text, no "
+        "preamble, no markdown, no subject line."
+    )
+
+
+def _nudge_draft_ok(draft: str, client_name: str, missing: list) -> bool:
+    """Post-check on the model's output (docs/API.md "Nudge draft").
+
+    Deterministic gate, no probabilities: must name the client, must name
+    every missing document verbatim, must not carry a bracket placeholder,
+    must not be empty or over-length. Any failure -> caller falls back to the
+    template, never a 500.
+    """
+    if not draft or len(draft) > NUDGE_MAX_CHARS:
+        return False
+    if "[" in draft:
+        return False
+    if client_name and client_name not in draft:
+        return False
+    for m in missing:
+        if m not in draft:
+            return False
+    return True
+
+
+@app.get("/clients/{client_id}/nudge")
+async def get_client_nudge(client_id: str):
+    """Draft a "still waiting on" reminder for one client's missing checklist
+    items. Complete client -> draft: null. Never 500s on a model failure or a
+    misbehaving model output — falls back to the deterministic template.
+    """
+    with STATE_LOCK:
+        client = STATE["clients"].get(client_id)
+        if client is None:
+            raise HTTPException(404, f"no client {client_id}")
+        client_name = client.get("name", "") or ""
+        received = set(client.get("received_docs", []) or [])
+        missing = [t for t in client.get("expected_docs", []) or [] if t not in received]
+
+    if not missing:
+        return {"client_id": client_id, "missing": [], "draft": None}
+
+    generated_by = "template"
+    draft = None
+    try:
+        raw = model_generate_text(_nudge_prompt(client_name, missing))
+        candidate = (raw or "").strip()
+        if _nudge_draft_ok(candidate, client_name, missing):
+            draft = candidate
+            generated_by = "model"
+    except Exception:  # noqa: BLE001 - a model outage must never break the draft
+        pass
+
+    if draft is None:
+        draft = _nudge_template(client_name, missing)
+
+    _append_event({
+        "type": "nudge_drafted",
+        "client_id": client_id,
+        "generated_by": generated_by,
+    })
+    return {
+        "client_id": client_id,
+        "missing": missing,
+        "draft": draft,
+        "generated_by": generated_by,
+    }
 
 
 # Human-readable field labels for the CSV export's field_label column. Mirrors

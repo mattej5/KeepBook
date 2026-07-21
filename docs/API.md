@@ -8,7 +8,7 @@ Base URL: `http://localhost:8100` (dev). All responses JSON.
 
 ## Model call (backend internal)
 
-All model access goes through one adapter — `backend/model_runtime.py`, exposing `extract(image_b64: str, prompt: str) -> str`. Nothing else in the backend may hardcode a model URL. Runtime picked by env:
+All model access goes through one adapter — `backend/model_runtime.py`, exposing `extract(image_b64: str, prompt: str) -> str` and `generate_text(prompt: str) -> str` (text-only, no image — used by the nudge-draft endpoint, see "Nudge draft" below). Nothing else in the backend may hardcode a model URL. Runtime picked by env:
 
 | Env var | Default | Meaning |
 |---|---|---|
@@ -81,6 +81,7 @@ Rule: a checklist item is satisfied only by a **confirmed** document. Unrecogniz
 | GET | `/clients` | — | `[Client, ...]` | Dashboard source. |
 | POST | `/clients` | `{"name": "...", "expected_docs": [...]}` | `Client` | Seed demo clients. |
 | GET | `/clients/{id}/export.csv` | — | `text/csv` (attachment) | Flat CSV of the client's **confirmed** docs, one row per field. `404` unknown client; header-only CSV when the client has no confirmed docs. See "CSV export" below. |
+| GET | `/clients/{id}/nudge` | — | `{"client_id": "...", "missing": [...], "draft": str \| null, "generated_by": "model" \| "template"}` | Drafts a "still waiting on" reminder note from the client's missing checklist items. `404` unknown client. See "Nudge draft" below. |
 | GET | `/stats` | — | `{"fields_extracted": n, "fields_corrected": n, "correction_rate": 0.04}` | The live-accuracy metric from PRD §9. Cheap to compute, big in demo. |
 | GET | `/stats/timeline?hours=24` | — | see "Event log" below | **Stretch** — powers the Stats for Nerds screen. Build only after core endpoints are green. |
 
@@ -120,6 +121,41 @@ Columns (in order):
 | `corrected` | `true` / `false` |
 | `original_value` | the pre-correction value when `corrected`, else empty |
 | `low_confidence` | `true` / `false` |
+
+## Nudge draft (missing-doc reminder)
+
+`GET /clients/{id}/nudge` — a visible-autonomy feature: the model **drafts** a
+short per-client reminder note from the checklist gap; a human copies it and
+sends it themselves. There is no send capability anywhere in KeepBook.
+
+- Client with nothing missing → `200 {"client_id": ..., "missing": [], "draft": null}` (no `generated_by` key).
+- Client with gaps → `200 {"client_id": ..., "missing": [...], "draft": "<text>", "generated_by": "model" | "template"}`.
+- Unknown client → `404` (same error shape as the other client endpoints).
+
+Draft path: the backend builds a strict prompt (greet the client by name, list
+the exact missing document names verbatim, ask for them, nothing else — no
+invented deadlines/amounts/fees, no `[placeholder]` text) and calls
+`backend/model_runtime.py`'s `generate_text(prompt) -> str` (the same one
+adapter `extract()` uses, just without an image). The model's raw output is
+then post-checked deterministically:
+
+- must contain the client's name
+- must contain every missing document name, verbatim
+- must not contain a `[` (placeholder tell)
+- must be non-empty and ≤ 900 characters
+
+Any check failure, or the call erroring/timing out, falls back to a
+deterministic template with the same content guarantees (`generated_by:
+"template"`) — the endpoint never 500s over a model misbehaving. Each call
+appends one event to `backend/events.jsonl`:
+
+```jsonc
+{"ts": "2026-07-20T09:14:02Z", "type": "nudge_drafted", "client_id": "client_smith", "generated_by": "model"}
+```
+
+This event type is not one of `extracted` / `unrecognized` / `confirmed`, so
+it is invisible to `GET /stats/timeline` — that endpoint's response shape is
+unchanged.
 
 ## Event log (stretch tier — Stats for Nerds)
 
