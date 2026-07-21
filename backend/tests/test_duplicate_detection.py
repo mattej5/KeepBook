@@ -2,9 +2,11 @@
 
 Covers: zero-byte/undecodable intake -> 400 (IMPROVEMENTS #14); exact-duplicate
 flagged; near-duplicate (re-encoded, different bytes -> perceptual path) flagged;
-distinct documents not flagged; resolve-duplicate clears + persists + events;
-delete clears dangling duplicate_of; phash/duplicate_of survive restart; and an
-old state file without the new fields still loads.
+distinct documents (cross-type AND the demo-critical same-type different-people
+case) not flagged; resolve-duplicate clears + persists + events; delete clears
+dangling duplicate_of; phash/duplicate_of survive restart; an old state file
+without the new fields still loads; and legacy 16-hex (64-bit-scheme) phash
+values are recomputed from the stored image or safely skipped.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import importlib
 import importlib.util
 import io
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -27,9 +30,12 @@ BACKEND = ROOT / "backend"
 TESTSET = ROOT / "eval" / "testset"
 
 # Real distinct forms from the eval set. w2_clean_01 is the base; k1_clean_01 is a
-# DIFFERENT type (dHash distance 19 -> well above THRESHOLD, must not be flagged).
+# DIFFERENT type (far outside the stage-1 prefilter, must not be flagged);
+# w2_clean_02 is the SAME type but a different person (stage-1 hash COLLIDES at
+# distance 0 — the stage-2 pixel confirm is what must reject it).
 BASE_IMG = TESTSET / "w2_clean_01.png"
 DISTINCT_IMG = TESTSET / "k1_clean_01.png"
+SAME_TYPE_DISTINCT_IMG = TESTSET / "w2_clean_02.png"
 
 
 def _reencoded(png_bytes: bytes) -> bytes:
@@ -149,11 +155,14 @@ def test_exact_duplicate_is_flagged_and_logs_event(api):
     first_id = _intake(client, "scan.png", data).json()["queued"][0]
     second_id = _intake(client, "scan_again.png", data).json()["queued"][0]
 
+    import dedup
+
     first = client.get(f"/documents/{first_id}").json()
     second = client.get(f"/documents/{second_id}").json()
     assert first["duplicate_of"] is None
     assert second["duplicate_of"] == first_id
-    assert isinstance(second["phash"], str) and len(second["phash"]) == 16
+    assert isinstance(second["phash"], str)
+    assert len(second["phash"]) == dedup.PHASH_HEX_LEN  # 256-bit scheme: 64 hex
 
     ev = _events(root)
     assert any(
@@ -180,6 +189,18 @@ def test_distinct_documents_are_not_flagged(api):
     _module, client, _root = api
     a_id = _intake(client, "w2.png", BASE_IMG.read_bytes()).json()["queued"][0]
     b_id = _intake(client, "k1.png", DISTINCT_IMG.read_bytes()).json()["queued"][0]
+
+    assert client.get(f"/documents/{a_id}").json()["duplicate_of"] is None
+    assert client.get(f"/documents/{b_id}").json()["duplicate_of"] is None
+
+
+def test_different_people_same_type_docs_are_not_flagged(api):
+    """The demo-critical case: two DIFFERENT people's W-2s share a blank template,
+    so their 256-bit dHashes collide at distance 0 (stage 1 passes them as
+    candidates). The stage-2 pixel confirm must REJECT the pair — no flag."""
+    _module, client, _root = api
+    a_id = _intake(client, "w2_person_a.png", BASE_IMG.read_bytes()).json()["queued"][0]
+    b_id = _intake(client, "w2_person_b.png", SAME_TYPE_DISTINCT_IMG.read_bytes()).json()["queued"][0]
 
     assert client.get(f"/documents/{a_id}").json()["duplicate_of"] is None
     assert client.get(f"/documents/{b_id}").json()["duplicate_of"] is None
@@ -275,3 +296,58 @@ def test_old_state_file_without_new_fields_still_loads(api):
     # and must not be flagged (the legacy doc has no phash to compare against).
     new_id = _intake(fresh_client, "new.png", DISTINCT_IMG.read_bytes()).json()["queued"][0]
     assert fresh_client.get(f"/documents/{new_id}").json()["duplicate_of"] is None
+
+
+def _seed_legacy_doc(module, root, image_src=None, image_rel="uploads/doc_001.png"):
+    """Insert a doc carrying an OLD-SCHEME 16-hex phash (64-bit era) into state.
+
+    image_src copies a real image to the doc's stored path; None leaves the path
+    dangling (the unreadable-legacy case). status 'confirmed' so the worker never
+    touches it; seq_doc bumped so new intakes mint fresh ids.
+    """
+    if image_src is not None:
+        dest = root / image_rel
+        dest.parent.mkdir(exist_ok=True)
+        shutil.copyfile(image_src, dest)
+    with module.STATE_LOCK:
+        module.STATE["documents"]["doc_001"] = {
+            "id": "doc_001", "client_id": None, "status": "confirmed",
+            "doc_type": "W-2", "image_path": image_rel,
+            "received_at": "2026-07-01T00:00:00Z", "fields": {},
+            "phash": "0123456789abcdef",  # 16 hex = old 64-bit scheme
+            "duplicate_of": None,
+        }
+        module.STATE["seq_doc"] = 1
+        module._persist_locked()
+
+
+def test_legacy_16hex_phash_is_recomputed_from_stored_image_and_dup_flagged(api):
+    """Migration pin: a legacy 64-bit phash (16 hex) with its image still on disk
+    is recomputed under the current scheme at the next intake, persisted, and a
+    re-encoded copy is correctly flagged against the legacy doc."""
+    module, client, _root = api
+    import dedup
+
+    _seed_legacy_doc(module, Path(module.BASE_DIR), image_src=BASE_IMG)
+    reenc = _reencoded(BASE_IMG.read_bytes())
+    new_id = _intake(client, "copy.jpg", reenc).json()["queued"][0]
+
+    assert client.get(f"/documents/{new_id}").json()["duplicate_of"] == "doc_001"
+    legacy = client.get("/documents/doc_001").json()
+    assert len(legacy["phash"]) == dedup.PHASH_HEX_LEN  # upgraded in place
+    persisted = json.loads(Path(module.STATE_PATH).read_text())
+    assert len(persisted["documents"]["doc_001"]["phash"]) == dedup.PHASH_HEX_LEN
+
+
+def test_legacy_phash_with_missing_image_is_skipped_never_crashes_or_false_flags(api):
+    """Migration pin: a legacy 16-hex phash whose stored image is GONE cannot be
+    recomputed — the doc is skipped for comparison. Intake succeeds, nothing is
+    flagged off a length mismatch, and the unreadable legacy phash is untouched."""
+    module, client, _root = api
+    _seed_legacy_doc(module, Path(module.BASE_DIR), image_src=None,
+                     image_rel="uploads/gone.png")
+
+    new_id = _intake(client, "new.jpg", _reencoded(BASE_IMG.read_bytes())).json()["queued"][0]
+
+    assert client.get(f"/documents/{new_id}").json()["duplicate_of"] is None
+    assert client.get("/documents/doc_001").json()["phash"] == "0123456789abcdef"
