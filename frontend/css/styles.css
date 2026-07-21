@@ -213,6 +213,14 @@ main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
   text-transform: uppercase; letter-spacing: .06em; margin: 22px 0 8px;
 }
 
+/* Encrypted-PDF password prompt (Capture screen). Paper/ink tokens throughout. */
+.pdf-pw { padding: 6px 4px 4px; }
+.pdf-pw-msg { font-size: 13.5px; color: var(--ink); margin-bottom: 10px; }
+.pdf-pw-msg.error { color: var(--red); }
+.pdf-pw-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pdf-pw-input { max-width: 260px; }
+.pdf-pw-note { font-size: 11.5px; color: var(--faint); margin-top: 8px; }
+
 .qrow {
   display: flex; align-items: center; gap: 12px;
   padding: 11px 6px; border-bottom: 1px solid var(--line);

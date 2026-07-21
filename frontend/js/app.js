@@ -212,12 +212,13 @@
     for (var i = 0; i < list.length; i++) {
       var f = list[i];
       var okType = f.type && f.type.indexOf("image") === 0;
+      var isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
       var okExt = /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "");
-      if (!okType && !okExt) { rejected++; continue; }  // KeepBook reads images, not PDFs
-      if (okType) { try { f._url = URL.createObjectURL(f); } catch (e) {} }
+      if (!okType && !okExt && !isPdf) { rejected++; continue; }  // images + PDFs only
+      if (okType) { try { f._url = URL.createObjectURL(f); } catch (e) {} }  // PDFs render server-side
       state.dropped.push(f);
     }
-    if (rejected) toast(rejected + (rejected === 1 ? " file" : " files") + " skipped — KeepBook reads images only (PNG/JPG)");
+    if (rejected) toast(rejected + (rejected === 1 ? " file" : " files") + " skipped — KeepBook reads images (PNG/JPG) and PDFs");
     renderCapture();
   }
 
@@ -227,29 +228,82 @@
     // Snapshot the done-count first so pre-seeded / earlier docs don't inflate
     // this batch's progress bar (IMPROVEMENTS #3).
     api.getQueue().then(
-      function (q0) { beginBatch(files, (q0 && q0.done) || 0); },
-      function () { beginBatch(files, 0); }
+      function (q0) { submitBatch(files, (q0 && q0.done) || 0, null); },
+      function () { submitBatch(files, 0, null); }
     );
   }
 
-  function beginBatch(files, baseDone) {
-    state.processing = { total: files.length, baseDone: baseDone };
-    state.dropped = [];
-    renderProcessing({ pending: files.length, processing: null, done: baseDone });
+  // Submit one batch. `password` applies to any password-protected PDFs in the
+  // batch; it is passed straight to the intake request and never stored. On a
+  // password_required / password_incorrect 400 the SAME files are re-submitted
+  // with the password the user types (promptForPdfPassword).
+  function submitBatch(files, baseDone, password) {
+    // Enter the processing shell only on the first attempt; a password retry
+    // keeps it (and the already-cleared queue) in place.
+    if (!state.processing) {
+      state.processing = { total: files.length, baseDone: baseDone };
+      state.dropped = [];
+      renderProcessing({ pending: files.length, processing: null, done: baseDone });
+    }
     $("process-btn").disabled = true;
     $("process-btn").textContent = "Processing…";
-    api.intake(files).then(function (r) {
+    api.intake(files, password).then(function (r) {
       // Remember this batch's doc ids so the done-state can tell whether any
       // came back assigned to a client (drives the honest done copy, #4).
       if (state.processing) state.processing.batchIds = (r && r.queued) || [];
       pollQueue(true);
-    }).catch(function () {
+    }).catch(function (err) {
+      var detail = (err && err.detail) || "";
+      if (detail.indexOf("password_required") === 0 || detail.indexOf("password_incorrect") === 0) {
+        // A PDF in this batch is encrypted. Prompt, then retry the same files.
+        promptForPdfPassword(files, baseDone, detail.indexOf("password_incorrect") === 0);
+        return;
+      }
       toast("Couldn’t reach the model — is the model server running?");
       state.processing = null;
       $("process-btn").disabled = false;
       $("process-btn").textContent = "Process files";
       renderCapture();
     });
+  }
+
+  // Inline password prompt for an encrypted PDF. The password lives only in the
+  // input's memory: it is read into a local variable for the retry and the input
+  // is cleared immediately, so nothing is persisted anywhere. type="password"
+  // keeps it off-screen; the retry sends the SAME files with it.
+  function promptForPdfPassword(files, baseDone, wrong) {
+    var msg = wrong
+      ? "That password didn’t work. Try again."
+      : "This PDF is password-protected. Enter its password to unlock it on this Mac.";
+    $("queue-block").innerHTML =
+      '<div class="section-label">Password needed</div>' +
+      '<div class="pdf-pw">' +
+        '<div class="pdf-pw-msg' + (wrong ? " error" : "") + '">' + esc(msg) + '</div>' +
+        '<form class="pdf-pw-row" id="pdf-pw-form" autocomplete="off">' +
+          '<input type="password" id="pdf-pw-input" class="field-input pdf-pw-input" placeholder="PDF password" autocomplete="off" aria-label="PDF password">' +
+          '<button type="submit" class="btn btn-sm" id="pdf-pw-submit">Unlock</button>' +
+          '<button type="button" class="btn-ghost btn-sm" id="pdf-pw-cancel">Cancel</button>' +
+        '</form>' +
+        '<div class="pdf-pw-note">Your password never leaves this Mac and is never saved.</div>' +
+      '</div>';
+    $("process-btn").disabled = true;
+    $("process-btn").textContent = "Waiting for password…";
+    var input = $("pdf-pw-input");
+    if (input) input.focus();
+    $("pdf-pw-form").onsubmit = function (e) {
+      e.preventDefault();
+      var pw = input ? input.value : "";
+      if (input) input.value = "";  // clear from the DOM the moment we read it
+      if (!pw) { if (input) input.focus(); return; }
+      submitBatch(files, baseDone, pw);  // password kept only in this closure
+    };
+    $("pdf-pw-cancel").onclick = function () {
+      state.processing = null;
+      state.dropped = files;  // restore the queue so the user can retry or remove
+      $("process-btn").disabled = false;
+      $("process-btn").textContent = "Process files";
+      renderCapture();
+    };
   }
 
   function renderProcessing(q) {
