@@ -1,0 +1,147 @@
+scheme: 256-bit dHash (17x16 grid, 64 hex) + pixel confirm (384^2 gray, delta 60, cutoff 6)
+testset images: 32
+
+== STAGE 1 (dHash prefilter) ==
+-- closest SAME-type distinct pairs (shared template -> collide; stage 2's job) --
+  dist   0   1098_clean_01.png  vs  1098_clean_02.png
+  dist   0   1099nec_clean_01.png  vs  1099nec_clean_02.png
+  dist   0   k1_clean_01.png  vs  k1_clean_02.png
+  dist   0   w2_clean_01.png  vs  w2_clean_02.png
+  dist   0   w2_clean_01.png  vs  w2_clean_03.png
+  dist   0   w2_clean_02.png  vs  w2_clean_03.png
+-- closest CROSS-type distinct pairs (bound on prefilter width) --
+  dist  37   charitable_receipt_01.png (charitable receipt)  vs  letter_01.png (UNRECOGNIZED)
+  dist  39   brokerage_stmt_01.png (brokerage statement)  vs  charitable_receipt_01.png (charitable receipt)
+  dist  42   brokerage_stmt_01.png (brokerage statement)  vs  letter_01.png (UNRECOGNIZED)
+  dist  48   charitable_receipt_01.png (charitable receipt)  vs  receipt_01.png (UNRECOGNIZED)
+  dist  49   1098_photo_02.png (1098)  vs  1099int_photo_02.png (1099-INT)
+  dist  55   brokerage_stmt_01.png (brokerage statement)  vs  receipt_01.png (UNRECOGNIZED)
+-- TRUE-DUP hash distances (prefilter must catch: dist <= THRESHOLD) --
+  dist   0   w2_clean_01.png  ->  png-reencode
+  dist   6   w2_clean_01.png  ->  jpeg q85
+  dist   5   w2_clean_01.png  ->  jpeg q60
+  dist   7   w2_clean_01.png  ->  jpeg q30
+  dist   7   w2_clean_01.png  ->  downscale x0.5
+  dist   4   w2_clean_01.png  ->  downscale x0.5 + jpeg q70
+  dist   3   w2_clean_01.png  ->  resize x0.5 round-trip
+  dist   6   w2_clean_01.png  ->  resize x0.75 round-trip
+  dist   4   w2_clean_01.png  ->  resize x0.6 + jpeg q70
+  dist   0   1099int_clean_01.png  ->  png-reencode
+  dist   4   1099int_clean_01.png  ->  jpeg q85
+  dist   3   1099int_clean_01.png  ->  jpeg q60
+  dist   5   1099int_clean_01.png  ->  jpeg q30
+  dist   4   1099int_clean_01.png  ->  downscale x0.5
+  dist   4   1099int_clean_01.png  ->  downscale x0.5 + jpeg q70
+  dist   4   1099int_clean_01.png  ->  resize x0.5 round-trip
+  dist   4   1099int_clean_01.png  ->  resize x0.75 round-trip
+  dist   4   1099int_clean_01.png  ->  resize x0.6 + jpeg q70
+  dist   0   k1_clean_01.png  ->  png-reencode
+  dist   5   k1_clean_01.png  ->  jpeg q85
+  dist   7   k1_clean_01.png  ->  jpeg q60
+  dist   7   k1_clean_01.png  ->  jpeg q30
+  dist   6   k1_clean_01.png  ->  downscale x0.5
+  dist   8   k1_clean_01.png  ->  downscale x0.5 + jpeg q70
+  dist  10   k1_clean_01.png  ->  resize x0.5 round-trip
+  dist   4   k1_clean_01.png  ->  resize x0.75 round-trip
+  dist   6   k1_clean_01.png  ->  resize x0.6 + jpeg q70
+  dist   0   1098_clean_01.png  ->  png-reencode
+  dist   2   1098_clean_01.png  ->  jpeg q85
+  dist   3   1098_clean_01.png  ->  jpeg q60
+  dist   5   1098_clean_01.png  ->  jpeg q30
+  dist   4   1098_clean_01.png  ->  downscale x0.5
+  dist   5   1098_clean_01.png  ->  downscale x0.5 + jpeg q70
+  dist   5   1098_clean_01.png  ->  resize x0.5 round-trip
+  dist   3   1098_clean_01.png  ->  resize x0.75 round-trip
+  dist   4   1098_clean_01.png  ->  resize x0.6 + jpeg q70
+  dist   0   w2_photo_01.png  ->  png-reencode
+  dist   0   w2_photo_01.png  ->  jpeg q85
+  dist   0   w2_photo_01.png  ->  jpeg q60
+  dist   3   w2_photo_01.png  ->  jpeg q30
+  dist   0   w2_photo_01.png  ->  downscale x0.5
+  dist   2   w2_photo_01.png  ->  downscale x0.5 + jpeg q70
+  dist   0   w2_photo_01.png  ->  resize x0.5 round-trip
+  dist   0   w2_photo_01.png  ->  resize x0.75 round-trip
+  dist   2   w2_photo_01.png  ->  resize x0.6 + jpeg q70
+
+== STAGE 2 (pixel-difference confirm) ==
+-- TRUE-DUP variants (must CONFIRM: count <= 6) --
+  count     0   w2_clean_01.png  ->  png-reencode
+  count     0   w2_clean_01.png  ->  jpeg q85
+  count     0   w2_clean_01.png  ->  jpeg q60
+  count     0   w2_clean_01.png  ->  jpeg q30
+  count     0   w2_clean_01.png  ->  downscale x0.5
+  count     0   w2_clean_01.png  ->  downscale x0.5 + jpeg q70
+  count     0   w2_clean_01.png  ->  resize x0.5 round-trip
+  count     0   w2_clean_01.png  ->  resize x0.75 round-trip
+  count     0   w2_clean_01.png  ->  resize x0.6 + jpeg q70
+  count     0   1099int_clean_01.png  ->  png-reencode
+  count     0   1099int_clean_01.png  ->  jpeg q85
+  count     0   1099int_clean_01.png  ->  jpeg q60
+  count     0   1099int_clean_01.png  ->  jpeg q30
+  count     0   1099int_clean_01.png  ->  downscale x0.5
+  count     0   1099int_clean_01.png  ->  downscale x0.5 + jpeg q70
+  count     0   1099int_clean_01.png  ->  resize x0.5 round-trip
+  count     0   1099int_clean_01.png  ->  resize x0.75 round-trip
+  count     0   1099int_clean_01.png  ->  resize x0.6 + jpeg q70
+  count     0   k1_clean_01.png  ->  png-reencode
+  count     0   k1_clean_01.png  ->  jpeg q85
+  count     0   k1_clean_01.png  ->  jpeg q60
+  count     0   k1_clean_01.png  ->  jpeg q30
+  count     0   k1_clean_01.png  ->  downscale x0.5
+  count     0   k1_clean_01.png  ->  downscale x0.5 + jpeg q70
+  count     0   k1_clean_01.png  ->  resize x0.5 round-trip
+  count     0   k1_clean_01.png  ->  resize x0.75 round-trip
+  count     0   k1_clean_01.png  ->  resize x0.6 + jpeg q70
+  count     0   1098_clean_01.png  ->  png-reencode
+  count     0   1098_clean_01.png  ->  jpeg q85
+  count     0   1098_clean_01.png  ->  jpeg q60
+  count     0   1098_clean_01.png  ->  jpeg q30
+  count     0   1098_clean_01.png  ->  downscale x0.5
+  count     0   1098_clean_01.png  ->  downscale x0.5 + jpeg q70
+  count     0   1098_clean_01.png  ->  resize x0.5 round-trip
+  count     0   1098_clean_01.png  ->  resize x0.75 round-trip
+  count     0   1098_clean_01.png  ->  resize x0.6 + jpeg q70
+  count     0   w2_photo_01.png  ->  png-reencode
+  count     0   w2_photo_01.png  ->  jpeg q85
+  count     0   w2_photo_01.png  ->  jpeg q60
+  count     0   w2_photo_01.png  ->  jpeg q30
+  count     0   w2_photo_01.png  ->  downscale x0.5
+  count     0   w2_photo_01.png  ->  downscale x0.5 + jpeg q70
+  count     0   w2_photo_01.png  ->  resize x0.5 round-trip
+  count     0   w2_photo_01.png  ->  resize x0.75 round-trip
+  count     0   w2_photo_01.png  ->  resize x0.6 + jpeg q70
+-- SAME-type DIFFERENT-people pairs (must REJECT: count > 6) --
+  count   123   w2_clean_01.png  vs  w2_clean_02.png
+  count    97   w2_clean_01.png  vs  w2_clean_03.png
+  count    77   w2_clean_02.png  vs  w2_clean_03.png
+  count    41   1098_clean_01.png  vs  1098_clean_02.png
+  count    14   k1_clean_01.png  vs  k1_clean_02.png
+  count   102   1099nec_clean_01.png  vs  1099nec_clean_02.png
+  count    68   1099nec_clean_01.png  vs  1099nec_clean_03.png
+  count    78   1099nec_clean_02.png  vs  1099nec_clean_03.png
+  count    77   1099int_clean_01.png  vs  1099int_clean_02.png
+-- KNOWN-MISS variants (accepted false negatives; recorded, not required) --
+  count     3   w2_clean_01.png  ->  downscale x0.35
+  count   606   w2_clean_01.png  ->  downscale x0.25
+  count     2   1099int_clean_01.png  ->  downscale x0.35
+  count  2257   1099int_clean_01.png  ->  downscale x0.25
+  count     0   k1_clean_01.png  ->  downscale x0.35
+  count     0   k1_clean_01.png  ->  downscale x0.25
+  count     8   1098_clean_01.png  ->  downscale x0.35
+  count  2203   1098_clean_01.png  ->  downscale x0.25
+  count     0   w2_photo_01.png  ->  downscale x0.35
+  count     3   w2_photo_01.png  ->  downscale x0.25
+
+================ SUMMARY ================
+stage1 same-type distinct floor      : 0  (hash CANNOT separate; stage 2 must)
+stage1 cross-type distinct floor     : 37
+stage1 true-dup band max             : 10
+stage1 THRESHOLD (shipped)           : 16
+stage2 true-dup count max            : 0
+stage2 same-type distinct count min  : 14
+stage2 cutoff (shipped)              : 6
+CHECK prefilter catches true-dup band          : True
+CHECK prefilter below cross-type floor         : True
+CHECK confirm accepts every true-dup variant   : True
+CHECK confirm rejects every same-type distinct : True
+ALL CHECKS PASS: True

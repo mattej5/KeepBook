@@ -45,7 +45,7 @@ The eval runner (docs/EVAL.md) imports this same adapter and honors the same env
             | "brokerage statement" | "W-9" | "engagement letter" | "UNRECOGNIZED",
   "image_path": "uploads/doc_001.png",
   "received_at": "2026-07-18T09:14:02Z",   // OPTIONAL — set at intake; frontend shows "Received Jul 18" if present
-  "phash": "a1b2c3d4e5f60718",            // OPTIONAL (additive) — 64-bit dHash as 16 hex chars, computed at intake. Absent on pre-feature docs.
+  "phash": "a1b2…(64 hex chars)",         // OPTIONAL (additive) — 256-bit dHash (17x16 grid) as 64 hex chars, computed at intake. Absent on pre-feature docs; legacy 16-hex (64-bit era) values are lazily recomputed from the stored image at the next intake, or skipped if the image is gone.
   "duplicate_of": null,                    // OPTIONAL (additive) — doc_id this was flagged a near/exact duplicate of, or null. See "Duplicate detection".
   "fields": {                          // extracted; keys vary by doc_type
     // per-field OPTIONAL "low_confidence": true — backend sets it from honest deterministic signals
@@ -137,23 +137,36 @@ shape as the other intake 400s) and **no document is created**. In a multi-file
 batch, one bad file fails the whole request before any doc is written.
 
 **Hashing.** For every accepted image the backend computes a sha256 (exact-byte
-identity) and a 64-bit dHash (`phash`: grayscale → resize 9×8 → adjacent-pixel
-compare, stored as 16 hex chars). PIL only, no new dependencies.
+identity) and a 256-bit dHash (`phash`: grayscale → resize 17×16 → adjacent-pixel
+compare, stored as 64 hex chars). PIL only, no new dependencies.
 
-**Flagging.** If the new image exactly matches OR lands within a calibrated Hamming
-`THRESHOLD` of any existing non-deleted document's dHash, the new doc still runs the
-normal classify/extract pipeline but carries `duplicate_of: <nearest existing id>`
-(nearest by Hamming distance). The existing doc is untouched.
+**Flagging (two-stage).** An exact sha256 match is a duplicate outright. Otherwise,
+*stage 1* collects existing non-deleted docs within Hamming `THRESHOLD` of the new
+dHash (nearest first) and *stage 2* confirms each candidate by pixel difference
+against its stored image (both grayscale at 384², count pixels with |diff| > 60;
+count ≤ 6 confirms). The first confirmed candidate becomes `duplicate_of`; the new
+doc still runs the normal classify/extract pipeline; the existing doc is untouched.
 
-> **Calibration & known limits (`eval/dedup_calibration.py`).** `THRESHOLD = 5`,
-> the largest value below the nearest *different-type* pair (distance 6 on the
-> eval testset), catching the re-encode/resize/JPEG true-dup band (0–2) with a
-> cushion. TWO honest limits of a 64-bit dHash on template-heavy tax forms: (1)
-> two *different* same-type forms (e.g. two people's W-2s) share a blank template
-> and collapse to distance 0, so a client's second genuine same-type form WILL be
-> flagged — a safe, flag-only false positive the human clears in one click; (2) a
-> real phone-photo of a scan sits ~26–32 away and is NOT caught by dHash — the
-> reliable catches are an exact re-drop (sha256) and light re-encodes.
+> **Why two stages (`eval/dedup_calibration.py`, output committed alongside).**
+> Measured at 64/256/576/1024-bit: on template-heavy forms the dHash collapses two
+> *different* same-type docs (two people's W-2s) to distance 0 — the same band a
+> re-encoded copy sits in — so no hash threshold can separate "duplicate copy"
+> from "second client's same form". Pixel difference can: every realistic true-dup
+> variant (PNG re-encode, JPEG ≥ q30, 0.5× downscale, resize round-trips, combos)
+> measures **0** strongly-differing pixels, while same-type different-people pairs
+> measure **14–411**. Shipped: stage-1 `THRESHOLD = 16` (true-dup hash band 0–10,
+> different-type floor 37); stage-2 cutoff 6 (>2× under the distinct floor).
+> Honest limits: (1) a real phone-photo of a scan sits far outside stage 1
+> (~90+ bits) and is NOT caught — reliable catches are re-drops, re-encodes,
+> recompressions, and moderate downscales; (2) extreme downscales (≤0.35×) alias
+> the text past the stage-2 cutoff and are missed. Both are false *negatives* —
+> by design the tradeoff never puts a false flag in front of the reviewer.
+
+**Legacy phash migration.** State files written by the 64-bit scheme carry 16-hex
+`phash` values. On the next intake comparison the backend recomputes those from the
+doc's stored upload (persisted in place); a doc whose image is unreadable/gone is
+skipped for comparison. A length mismatch is never compared directly — never a
+crash, never a false flag.
 
 **Resolving.** `POST /documents/{id}/resolve-duplicate {"action":"keep"}` clears
 `duplicate_of` (sets null), persists, and appends a `dup_resolved` event. A doc

@@ -421,21 +421,44 @@ async def health():
 
 
 # ---------------------------- Intake ---------------------------------------
-def _detect_duplicate_locked(sha: str, phash: str) -> str:
-    """Nearest non-deleted duplicate of a new image, or None. Caller holds lock.
+def _detect_duplicate_locked(sha: str, phash: str, data: bytes) -> str:
+    """Nearest CONFIRMED duplicate of a new image, or None. Caller holds lock.
 
-    Exact path: sha256 hit in SHA_INDEX (verified still live). Perceptual path:
-    nearest existing doc within dedup.THRESHOLD Hamming distance of the dHash. The
-    new document is NOT in STATE yet, so it can never match itself.
+    Exact path: sha256 hit in SHA_INDEX (verified still live) — identical bytes
+    are a duplicate by definition, no further check. Perceptual path (two-stage,
+    see backend/dedup.py): stage 1 collects existing docs within dedup.THRESHOLD
+    Hamming distance of the 256-bit dHash (nearest first); stage 2 confirms each
+    candidate by full-resolution pixel difference against its stored image, and
+    the first confirmed candidate wins. Stage 2 is what tells "re-encoded same
+    form" (flag) apart from "different person's same-type form" (no flag) — the
+    hash alone cannot (both sit at distance 0 on template forms).
+
+    Migration: a doc whose stored phash length differs from the current scheme
+    (legacy 64-bit state files) gets its phash recomputed here from its stored
+    upload when readable — persisted by the caller's _persist_locked — else it is
+    skipped for comparison (find_candidates drops length mismatches; never a
+    crash, never a false flag). The new document is NOT in STATE yet, so it can
+    never match itself.
     """
     exact_id = SHA_INDEX.get(sha)
     if exact_id and exact_id in STATE["documents"]:
         return exact_id
-    dup_of, _dist = dedup.find_duplicate(
-        phash,
-        ((did, d.get("phash")) for did, d in STATE["documents"].items()),
-    )
-    return dup_of
+    candidates = []
+    for did, d in STATE["documents"].items():
+        ph = d.get("phash")
+        if ph and len(ph) != dedup.PHASH_HEX_LEN:
+            recomputed = dedup.dhash_from_file(_abs_image_path(d))
+            if recomputed:
+                d["phash"] = recomputed  # lazy upgrade, persisted with this intake
+                ph = recomputed
+            else:
+                continue  # unreadable legacy doc: skip, never false-flag
+        candidates.append((did, ph))
+    for did, _dist in dedup.find_candidates(phash, candidates):
+        doc = STATE["documents"].get(did)
+        if doc and dedup.is_pixel_duplicate(data, _abs_image_path(doc)):
+            return did
+    return None
 
 
 async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict:
@@ -449,7 +472,7 @@ async def _save_bytes(data: bytes, orig_name: str, sha: str, phash: str) -> dict
     ext = os.path.splitext(orig_name or "")[1].lower()
     if ext not in IMAGE_EXTS:
         ext = ".png"
-    duplicate_of = _detect_duplicate_locked(sha, phash)
+    duplicate_of = _detect_duplicate_locked(sha, phash, data)
     doc_id = _next_doc_id()
     rel_path = os.path.join("uploads", f"{doc_id}{ext}")
     with open(os.path.join(BASE_DIR, rel_path), "wb") as fh:
