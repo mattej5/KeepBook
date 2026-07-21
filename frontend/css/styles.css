@@ -286,6 +286,12 @@ main:has(#view-review.active) { max-width: 1320px; }
 /* Possible-duplicate pill — bordered amber, distinct from the solid "needs" fill
    so a flagged row reads as a separate signal a row can carry alongside its status. */
 .rl-badge.dup { background: #fff4d6; color: #8a5a00; border: 1px solid #e0b53d; margin-left: 6px; }
+/* Watched-inbox provenance chip — muted paper/ink, quieter than a status badge so
+   it reads as a small note ("this arrived on its own"), not an alert. */
+.rl-badge.source {
+  background: var(--paper-deep); color: var(--muted);
+  border: 1px solid var(--line); font-weight: 500; margin-left: 6px;
+}
 .rl-empty { font-size: 13px; color: var(--faint); padding: 12px 4px; }
 
 /* ---------- Possible-duplicate compare (Review detail) ---------- */
