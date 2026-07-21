@@ -45,6 +45,8 @@ The eval runner (docs/EVAL.md) imports this same adapter and honors the same env
             | "brokerage statement" | "W-9" | "engagement letter" | "UNRECOGNIZED",
   "image_path": "uploads/doc_001.png",
   "received_at": "2026-07-18T09:14:02Z",   // OPTIONAL — set at intake; frontend shows "Received Jul 18" if present
+  "phash": "a1b2c3d4e5f60718",            // OPTIONAL (additive) — 64-bit dHash as 16 hex chars, computed at intake. Absent on pre-feature docs.
+  "duplicate_of": null,                    // OPTIONAL (additive) — doc_id this was flagged a near/exact duplicate of, or null. See "Duplicate detection".
   "fields": {                          // extracted; keys vary by doc_type
     // per-field OPTIONAL "low_confidence": true — backend sets it from honest deterministic signals
     // (model needed a retry, value empty, or format check failed e.g. SSN/EIN/TIN pattern, non-numeric money).
@@ -78,6 +80,7 @@ Rule: a checklist item is satisfied only by a **confirmed** document. Unrecogniz
 | GET | `/documents/{id}` | — | `Document` | |
 | GET | `/documents/{id}/image` | — | image bytes | Review screen shows the source doc next to extracted fields. |
 | POST | `/documents/{id}/confirm` | `{"client_id": "...", "doc_type": "...", "fields": {"box2_fed_withheld": "9,183.44", ...}}` | updated `Document` | Any field differing from extraction gets `corrected: true` + `original_value`. Sets status `confirmed`, updates client checklist. |
+| POST | `/documents/{id}/resolve-duplicate` | `{"action": "keep"}` | updated `Document` | Clears `duplicate_of` (keep this copy). `404` unknown id; `400` if `action != "keep"`; no-op `200` if the doc carries no flag. To DISCARD the copy instead, use the existing `DELETE /documents/{id}`. See "Duplicate detection". |
 | GET | `/clients` | — | `[Client, ...]` | Dashboard source. |
 | POST | `/clients` | `{"name": "...", "expected_docs": [...]}` | `Client` | Seed demo clients. |
 | GET | `/clients/{id}/export.csv` | — | `text/csv` (attachment) | Flat CSV of the client's **confirmed** docs, one row per field. `404` unknown client; header-only CSV when the client has no confirmed docs. See "CSV export" below. |
@@ -120,6 +123,55 @@ Columns (in order):
 | `corrected` | `true` / `false` |
 | `original_value` | the pre-correction value when `corrected`, else empty |
 | `low_confidence` | `true` / `false` |
+
+## Duplicate detection (Phase 2, Tier A #1)
+
+A client often submits the same document twice (emailed scan + phone photo, or a
+literal double-drop). KeepBook notices at intake, flags it, and lets the human
+resolve. **Model proposes, human confirms — a flagged copy is never auto-dropped.**
+This also closes IMPROVEMENTS #14 (zero-byte/duplicate uploads accepted silently).
+
+**Intake validation (400).** Every uploaded image is decoded at intake. A zero-byte
+or PIL-unreadable upload returns `400` (`{"detail": "<name>: <reason>"}`, the same
+shape as the other intake 400s) and **no document is created**. In a multi-file
+batch, one bad file fails the whole request before any doc is written.
+
+**Hashing.** For every accepted image the backend computes a sha256 (exact-byte
+identity) and a 64-bit dHash (`phash`: grayscale → resize 9×8 → adjacent-pixel
+compare, stored as 16 hex chars). PIL only, no new dependencies.
+
+**Flagging.** If the new image exactly matches OR lands within a calibrated Hamming
+`THRESHOLD` of any existing non-deleted document's dHash, the new doc still runs the
+normal classify/extract pipeline but carries `duplicate_of: <nearest existing id>`
+(nearest by Hamming distance). The existing doc is untouched.
+
+> **Calibration & known limits (`eval/dedup_calibration.py`).** `THRESHOLD = 5`,
+> the largest value below the nearest *different-type* pair (distance 6 on the
+> eval testset), catching the re-encode/resize/JPEG true-dup band (0–2) with a
+> cushion. TWO honest limits of a 64-bit dHash on template-heavy tax forms: (1)
+> two *different* same-type forms (e.g. two people's W-2s) share a blank template
+> and collapse to distance 0, so a client's second genuine same-type form WILL be
+> flagged — a safe, flag-only false positive the human clears in one click; (2) a
+> real phone-photo of a scan sits ~26–32 away and is NOT caught by dHash — the
+> reliable catches are an exact re-drop (sha256) and light re-encodes.
+
+**Resolving.** `POST /documents/{id}/resolve-duplicate {"action":"keep"}` clears
+`duplicate_of` (sets null), persists, and appends a `dup_resolved` event. A doc
+without a flag is an idempotent **no-op 200** (returns the doc unchanged, appends no
+event) so a double-click or stale UI is safe. To DISCARD the extra copy instead,
+use the existing `DELETE /documents/{id}` (no second delete path). Deleting a
+document also clears any dangling `duplicate_of` on other docs that referenced it.
+
+**Round-trip.** `phash`/`duplicate_of` are persisted in `state.json` and survive
+restart. Old state files without the fields still load (additive/optional).
+
+**Events** (appended to `events.jsonl`; additive — `/stats/timeline` ignores unknown
+types and is unchanged):
+
+```jsonc
+{"ts": "2026-07-20T09:14:05Z", "type": "dup_flagged", "doc_id": "doc_008", "duplicate_of": "doc_007"}
+{"ts": "2026-07-20T09:15:12Z", "type": "dup_resolved", "doc_id": "doc_008", "action": "keep"}
+```
 
 ## Event log (stretch tier — Stats for Nerds)
 
