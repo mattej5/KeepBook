@@ -283,7 +283,32 @@ main:has(#view-review.active) { max-width: 1320px; }
 .rl-badge.needs { background: var(--highlighter-soft); color: #7a5b00; }
 .rl-badge.unrec { background: #ececec; color: var(--muted); }
 .rl-badge.error { background: #fbe6e2; color: var(--red); }
+/* Possible-duplicate pill — bordered amber, distinct from the solid "needs" fill
+   so a flagged row reads as a separate signal a row can carry alongside its status. */
+.rl-badge.dup { background: #fff4d6; color: #8a5a00; border: 1px solid #e0b53d; margin-left: 6px; }
 .rl-empty { font-size: 13px; color: var(--faint); padding: 12px 4px; }
+
+/* ---------- Possible-duplicate compare (Review detail) ---------- */
+.dup-compare {
+  border: 1px solid var(--line); border-left: 3px solid var(--highlighter);
+  border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; background: #fffaf0;
+}
+.dup-head { font-size: 13px; font-weight: 700; color: #8a5a00; }
+.dup-sub { font-size: 12px; color: var(--muted); margin: 3px 0 10px; }
+.dup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dup-fig { margin: 0; }
+.dup-fig figcaption {
+  font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px;
+}
+.dup-fig img {
+  width: 100%; height: auto; max-height: 220px; object-fit: contain;
+  border: 1px solid var(--line); border-radius: 5px; background: var(--paper-deep); display: block;
+}
+.dup-noimg {
+  border: 1px dashed var(--line); border-radius: 5px; color: var(--faint);
+  font-size: 12px; text-align: center; padding: 28px 8px; background: var(--paper-deep);
+}
+.dup-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
 
 /* Image pane takes the lion's share; fields cap at ~460px so lines stay readable. */
 .detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); gap: 16px; }

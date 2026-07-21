@@ -355,7 +355,7 @@
         var landAttr = isNew ? ' style="animation-delay:' + Math.min(landIdx++, 6) * 40 + 'ms"' : '';
         return '<button class="rl-item' + (isNew ? " card-land" : "") + (d.id === state.selectedDoc ? " active" : "") + '" data-id="' + d.id + '"' + landAttr + '>' +
           '<div class="rl-type">' + esc(typ) + pageLabel(d) + '</div>' +
-          '<div class="rl-client">' + esc(client) + '</div>' + badge + '</button>';
+          '<div class="rl-client">' + esc(client) + '</div>' + badge + dupBadge(d) + '</button>';
       }).join("");
       needs.forEach(function (d) { state.knownReviewIds[d.id] = 1; });
       listEl.querySelectorAll("[data-id]").forEach(function (b) {
@@ -374,6 +374,16 @@
   function pageLabel(doc) {
     var pn = doc && doc.page_number;
     return pn ? ' <span class="page-label">p. ' + esc(String(pn)) + '</span>' : '';
+  }
+
+  // "possible duplicate" pill for a Review row whose backend flagged it a near/
+  // exact duplicate of an existing doc (doc.duplicate_of). Rendered from the new
+  // field only — absent/null => no pill. Human confirms via the detail compare.
+  function dupBadge(doc) {
+    return doc && doc.duplicate_of
+      ? '<span class="rl-badge dup" title="Possible duplicate of ' + esc(doc.duplicate_of) +
+        '">Possible duplicate</span>'
+      : '';
   }
 
   // Effective picks read straight off the identity controls. pickedClient does
@@ -444,6 +454,31 @@
         right += '<div class="error-banner">Couldn’t reach the model — is the model server running? Retry.</div>';
       } else if (unrec && !confirmed) {
         right += '<div class="unrec-banner">The model would not force this into a tax-form type. Classify it by hand if it belongs to a client, or leave it here.</div>';
+      }
+
+      // Possible-duplicate compare: this doc's image next to the doc it matched,
+      // both labeled, with the two human verdicts — Keep (not a dup) or Discard
+      // this copy. Rendered only when the backend flagged doc.duplicate_of. The
+      // model proposes; the human confirms — nothing is ever auto-dropped.
+      if (doc.duplicate_of) {
+        var dupUrl = api.imageUrl({ id: doc.duplicate_of });
+        right += '<div class="dup-compare">' +
+          '<div class="dup-head">Possible duplicate</div>' +
+          '<div class="dup-sub">This copy looks like <span class="tnum">' + esc(doc.duplicate_of) +
+            '</span>, already in KeepBook. Compare them, then keep this copy or discard it.</div>' +
+          '<div class="dup-pair">' +
+            '<figure class="dup-fig"><figcaption>This copy · <span class="tnum">' + esc(doc.id) + '</span></figcaption>' +
+              (imgUrl ? '<img src="' + esc(imgUrl) + '" alt="this copy">' : '<div class="dup-noimg">No preview</div>') +
+            '</figure>' +
+            '<figure class="dup-fig"><figcaption>Already filed · <span class="tnum">' + esc(doc.duplicate_of) + '</span></figcaption>' +
+              (dupUrl ? '<img src="' + esc(dupUrl) + '" alt="already-filed document">' : '<div class="dup-noimg">No preview</div>') +
+            '</figure>' +
+          '</div>' +
+          '<div class="dup-actions">' +
+            '<button class="btn btn-sm" id="dup-keep-btn" type="button">Keep — not a duplicate</button>' +
+            '<button class="link-discard" id="dup-discard-btn" type="button">Discard this copy</button>' +
+          '</div>' +
+        '</div>';
       }
 
       // client + doc_type pickers (needed to confirm; per docs/API.md /confirm)
@@ -555,6 +590,10 @@
       var td = $("to-dash"); if (td) td.onclick = function () { show("dashboard"); };
       var rb = $("reopen-btn"); if (rb) rb.onclick = function () { doUnconfirm(doc); };
       var db = $("discard-btn"); if (db) db.onclick = function () { doDelete(doc); };
+      // Duplicate-compare verdicts: keep this copy (clear the flag) or discard it
+      // (reuse the existing delete path — no second delete).
+      var dk = $("dup-keep-btn"); if (dk) dk.onclick = function () { doResolveDuplicate(doc); };
+      var dd = $("dup-discard-btn"); if (dd) dd.onclick = function () { doDelete(doc); };
       // Identity is an affirmative act: keep Confirm blocked (with a reason) until
       // the reviewer has restated the client. Re-evaluate on every identity edit.
       if (!confirmed) {
@@ -790,7 +829,7 @@
               : '<span class="rl-badge needs">Needs review</span>';
           return '<button class="rl-item" data-id="' + d.id + '"><div class="rl-type">' +
             esc(d.status === "error" ? "Couldn’t read" : d.status === "unrecognized" ? "Unknown document" : d.doc_type) + pageLabel(d) + '</div>' +
-            '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + '</button>';
+            '<div class="rl-client">' + esc(clientName(d.client_id) || "Unassigned") + '</div>' + badge + dupBadge(d) + '</button>';
         }).join("") : '<div class="rl-empty">Nothing left to review. All caught up.</div>';
         listEl.querySelectorAll("[data-id]").forEach(function (b) {
           b.onclick = function () { state.selectedDoc = b.dataset.id; renderReview(); };
@@ -815,6 +854,18 @@
       api.getClients().then(function (cs) { state.clients = cs; renderReview(); },
                            function () { renderReview(); });
     }).catch(function (e) { toast("Discard failed: " + e.message); });
+  }
+
+  // Keep a flagged copy: clear duplicate_of server-side, then re-render Review so
+  // the "possible duplicate" badge + compare pane drop away. The doc keeps its
+  // place in the review queue (status is unchanged) and can still be confirmed.
+  function doResolveDuplicate(doc) {
+    api.resolveDuplicate(doc.id).then(function (updated) {
+      toast("Kept — not a duplicate");
+      state.selectedDoc = updated.id;
+      renderReview();          // re-fetches docs, re-renders list + detail
+      refreshNavBadge();
+    }).catch(function (e) { toast("Couldn’t resolve: " + e.message); });
   }
 
   // Re-open a confirmed doc for correction (inverse of confirm). The doc returns
